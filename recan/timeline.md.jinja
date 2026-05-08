@@ -1,0 +1,33 @@
+# Recording Summary
+
+**Document:** `{{ session.document or "(unknown)" }}`
+**Recording Started:** {{ format_ts(session.start_time) }}
+
+## Totals
+
+| Metric            | Value                                                |
+| ----------------- | ---------------------------------------------------- |
+| Total Time        | {{ format_duration(session.total_time) }}            |
+| Time Focused      | {{ format_duration(session.total_time - session.total_time_unfocused) }} |
+| Time Unfocused    | {{ format_duration(session.total_time_unfocused) }}  |
+| Edits             | {{ session.total_edits }}                            |
+| IDE Actions       | {{ session.total_ide_actions }}                      |
+| Pastes            | {{ session.total_pastes }}                           |
+
+## Timeline
+
+{% if session.timeline -%}
+{% for entry in session.timeline -%}
+{% if entry.kind == "focus" -%}
+- **{{ format_ts(entry.timestamp) }}** — Lost focus for {{ format_duration(entry.duration) }}
+{% else -%}
+- **{{ format_ts(entry.timestamp) }}** — {{ "IDE Action" if entry.kind == "ide_action" else "Paste" }} ({{ entry.line_count }} lines, {{ entry.char_count }} chars)
+
+  ```{{ session.language }}
+  {{ entry.fragment | indent(2) }}
+  ```
+{% endif -%}
+{% endfor %}
+{%- else -%}
+*(no notable timeline entries)*
+{%- endif %}
