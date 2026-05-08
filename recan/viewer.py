@@ -65,7 +65,7 @@ def _embed_safe_json(bundle: dict) -> str:
     """
     text = json.dumps(bundle, ensure_ascii=False, default=str)
     text = text.replace("</", "<\\/")
-    text = text.replace(" ", "\\u2028").replace(" ", "\\u2029")
+    text = text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     return text
 
 
