@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 /samples/
+.DS_Store
+.idea
+*.csv
