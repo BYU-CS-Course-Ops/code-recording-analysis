@@ -1,4 +1,3 @@
-import gzip
 import json
 import re
 import statistics
@@ -7,7 +6,8 @@ import zlib
 from pathlib import Path
 from argparse import ArgumentParser
 
-from main import analyze_inputs
+from recan.session import analyze_inputs
+from recan.utils import load_recording
 
 
 EXCLUDED_FILE_TYPES = ['.html']
@@ -132,11 +132,9 @@ def analyze_assignment(folder: Path, out_dir: Path) -> None:
             continue
         student_id, problem_name = parsed
 
-        opener = gzip.open if recording.suffix == '.gz' else open
         try:
-            with opener(recording, 'rt') as f:
-                inputs = [json.loads(line) for line in f]
-            metrics = analyze_inputs(inputs, EXCLUDED_FILE_TYPES)
+            inputs = load_recording(recording, EXCLUDED_FILE_TYPES)
+            metrics = analyze_inputs(inputs)
         except (OSError, EOFError, json.JSONDecodeError, zlib.error) as exc:
             print(f"Warning: skipping {recording.name} — failed to read ({type(exc).__name__}: {exc})")
             continue
