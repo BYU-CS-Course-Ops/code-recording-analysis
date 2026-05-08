@@ -148,9 +148,10 @@ The walker subsumes both old functions:
 - Pairs `focusStatus` blur → next focus, producing `focus_intervals` and accumulating `total_time_unfocused`.
 - Tracks gaps between adjacent kept events, emitting `idle_gaps` for gaps over the threshold.
 - Maintains a running document string, snapshotting every `SNAPSHOT_INTERVAL_EVENTS` edits and one final snapshot at the end.
-- Tracks `deleted_fragments` (multiset) and `pasted_fragments` (per-fragment indices into a generated-edit timeline) to implement the existing move-detection rules:
-  - **Paste-then-delete**: if a delete matches a previously-recorded paste, the paste is retroactively cancelled.
+- Tracks `deleted_fragments` (multiset) to implement the move-detection rule:
   - **Delete-then-paste**: if a generated insert matches a previously-deleted fragment, treat it as a move and skip.
+
+  The previous **paste-then-delete** retroactive cancellation is dropped — the walker no longer maintains `pasted_fragments` and no longer rewrites past timeline entries.
 - Collapses adjacent generated edits within `BURST_GROUP_WINDOW_MS` into `bursts`, classifying singletons as `paste` and groups as `ide_action`.
 - Builds `timeline` (the human-friendly rollup of focus losses + bursts in chronological order) for `formaters.py` to consume.
 
@@ -237,7 +238,7 @@ This refactor must not change the analyzer's outputs on existing recordings. Spe
 - `--json` output keeps every key the current implementation produces. New Session keys (`events`, `focus_intervals`, `idle_gaps`, `bursts`, `snapshots`, `document`, `language`, `end_time`) are additive.
 - `--view` HTML player consumes the same bundle shape it does today (`metadata` / `events` / `bursts` / `focus_intervals` / `idle_gaps` / `snapshots` / `summary`). `viewer.py` constructs that bundle from the Session.
 - The default text output changes intentionally: from the current `print_timeline` string to a richer Markdown summary covering the same information. This is the one user-visible change.
-- The move-detection rules (paste-then-deleted = cancel; delete-then-pasted = skip) carry over verbatim.
+- The delete-then-paste move-detection rule (a generated insert matching a previously-deleted fragment is treated as a move) carries over. The previous paste-then-delete retroactive cancellation is intentionally dropped — both `--json` (`total_pastes`, `total_generated_events`, `timeline`) and the player bundle (`bursts`, `summary`) will show pastes that the old code would have cancelled. This is the second intentional behavior change.
 - Excluded file types still apply — they just apply at load time instead of inside the walker. Net behavior on excluded events is identical (they're dropped before they reach the walker).
 
 ## Build sequence
@@ -263,8 +264,8 @@ After each step, run:
 
 ## Risks and mitigations
 
-- **Risk:** Subtle drift in the unified walker vs. the two original functions (e.g. an edge case in the cancelled-paste retroaction).
-  **Mitigation:** Step 3 keeps both old functions callable as wrappers over the new walker; diff `--json` and the player bundle on every sample recording before deleting the old code.
+- **Risk:** Subtle drift in the unified walker vs. the two original functions on logic that's *meant* to carry over.
+  **Mitigation:** Step 3 keeps both old functions callable as wrappers over the new walker; diff `--json` and the player bundle on every sample recording. Expect intentional differences in paste/generated counts (paste-then-delete cancellation is dropped) — confirm those are the *only* differences before deleting the old code.
 - **Risk:** Markdown template output regresses content vs. the old text format (missing a field).
   **Mitigation:** Build the template from the current `print_timeline` field-by-field; cross-check against a known sample.
 - **Risk:** `analyze_assignment.py` breaks because a key it reads gets renamed.
