@@ -1,4 +1,3 @@
-import gzip
 import json
 
 import jinja2
@@ -7,11 +6,21 @@ from argparse import ArgumentParser
 from typing import Literal, TypedDict
 from datetime import datetime, timedelta
 
+from recan.utils import (
+    apply_edit,
+    event_kind,
+    format_duration,
+    format_ts,
+    is_generated_edit,
+    language_from_extension,
+    load_recording,
+    parse_ts,
+)
+
 
 BURST_GROUP_WINDOW_MS = 100
 IDLE_GAP_THRESHOLD_SECONDS = 5.0
 SNAPSHOT_INTERVAL_EVENTS = 200
-GENERATED_MIN_CHARS_SINGLE_LINE = 20
 
 
 class Input(TypedDict):
@@ -30,54 +39,6 @@ class EditInput(Input):
 
 class FocusStatusInput(Input):
     focused: bool
-
-
-def _parse_ts(value: str) -> datetime:
-    # Python's fromisoformat tolerates "Z" only from 3.11+, and chokes on
-    # nanosecond precision (e.g. "...916473800Z"). Trim to microseconds.
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    head, sep, tz = value.partition("+")
-    if "." in head:
-        whole, frac = head.split(".")
-        head = f"{whole}.{frac[:6]}"
-    return datetime.fromisoformat(head + sep + tz)
-
-
-def _event_kind(event: dict) -> str:
-    # Older recordings omit "type" — infer from which fields are present.
-    explicit = event.get("type")
-    if explicit:
-        return explicit
-    if "focused" in event:
-        return "focusStatus"
-    if "newFragment" in event:
-        return "edit"
-    return "unknown"
-
-
-def _is_generated_edit(event: dict) -> bool:
-    """Heuristic for "this insert wasn't typed character-by-character."
-
-    Filters out IDE word-completion (e.g. PyCharm emits ``"n "`` when a
-    completion fires after typing ``n`` + space) by requiring the fragment
-    to be either multi-line or substantively long on a single line.
-    """
-    fragment = event.get("newFragment", "")
-    if not fragment.strip():
-        return False
-    if not (any(c == ' ' for c in fragment) and any(c != ' ' for c in fragment)):
-        return False
-    if "\n" in fragment:
-        return True
-    return len(fragment) >= GENERATED_MIN_CHARS_SINGLE_LINE
-
-
-def _format_duration(seconds: float) -> str:
-    total = int(seconds)
-    h, rem = divmod(total, 3600)
-    m, s = divmod(rem, 60)
-    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
 def _collapse_ide_action_bursts(timeline: list[dict], window_ms: int) -> list[dict]:
@@ -123,40 +84,7 @@ def _collapse_ide_action_bursts(timeline: list[dict], window_ms: int) -> list[di
     return out
 
 
-def _language_from_extension(document: str) -> str:
-    """Map document filename to a highlight.js language name."""
-    ext = Path(document).suffix.lower()
-    return {
-        ".py": "python",
-        ".js": "javascript",
-        ".jsx": "javascript",
-        ".ts": "typescript",
-        ".tsx": "typescript",
-        ".c": "c",
-        ".h": "c",
-        ".cpp": "cpp",
-        ".cc": "cpp",
-        ".hpp": "cpp",
-        ".java": "java",
-        ".go": "go",
-        ".rs": "rust",
-        ".json": "json",
-        ".md": "markdown",
-        ".sh": "bash",
-        ".bash": "bash",
-        ".html": "xml",
-        ".xml": "xml",
-        ".css": "css",
-    }.get(ext, "plaintext")
-
-
-def _apply_edit(document: str, offset: int, old_fragment: str, new_fragment: str) -> str:
-    """Apply a single edit to the in-memory document string."""
-    end = offset + len(old_fragment)
-    return document[:offset] + new_fragment + document[end:]
-
-
-def _build_playback_bundle(inputs: list[dict], excluded_file_types: list[str]) -> dict:
+def _build_playback_bundle(inputs: list[dict]) -> dict:
     """Build the JSON bundle the HTML player consumes.
 
     Walks raw events once, keeping every edit (including move-detected re-pastes
@@ -187,15 +115,13 @@ def _build_playback_bundle(inputs: list[dict], excluded_file_types: list[str]) -
 
     for event in inputs:
         doc = event.get("document", "")
-        if any(doc.endswith(ext) for ext in excluded_file_types):
-            continue
 
-        ts = _parse_ts(event["timestamp"])
+        ts = parse_ts(event["timestamp"])
         if start_time is None:
             start_time = ts
         end_time = ts
 
-        kind = _event_kind(event)
+        kind = event_kind(event)
 
         if prev_ts is not None:
             gap = (ts - prev_ts).total_seconds()
@@ -234,7 +160,7 @@ def _build_playback_bundle(inputs: list[dict], excluded_file_types: list[str]) -
             offset = event.get("offset", 0)
             if document_name == "" and doc:
                 document_name = doc
-            document = _apply_edit(document, offset, old_fragment, new_fragment)
+            document = apply_edit(document, offset, old_fragment, new_fragment)
 
             entry = {
                 "timestamp": event["timestamp"],
@@ -256,7 +182,7 @@ def _build_playback_bundle(inputs: list[dict], excluded_file_types: list[str]) -
             if not cancelled_paste and len(old_fragment) > 1:
                 deleted_fragments[old_fragment] = deleted_fragments.get(old_fragment, 0) + 1
 
-            if _is_generated_edit(event):
+            if is_generated_edit(event):
                 if deleted_fragments.get(new_fragment, 0) > 0:
                     deleted_fragments[new_fragment] -= 1
                 else:
@@ -286,10 +212,6 @@ def _build_playback_bundle(inputs: list[dict], excluded_file_types: list[str]) -
 
     generated_timeline = [e for e in generated_timeline if e is not None]
 
-    # bursts: collapse the generated_timeline through the existing helper, then
-    # convert kept entries into start/end index ranges by walking the original
-    # generated_timeline forward and grouping consecutive entries within the
-    # window
     bursts: list[dict] = []
     window = timedelta(milliseconds=BURST_GROUP_WINDOW_MS)
     group: list[dict] = []
@@ -322,7 +244,7 @@ def _build_playback_bundle(inputs: list[dict], excluded_file_types: list[str]) -
     return {
         "metadata": {
             "document": document_name,
-            "language": _language_from_extension(document_name),
+            "language": language_from_extension(document_name),
             "start_time": start_time.isoformat().replace("+00:00", "Z") if start_time else "",
             "end_time": end_time.isoformat().replace("+00:00", "Z") if end_time else "",
             "duration_seconds": duration,
@@ -378,7 +300,7 @@ def _render_player_html(bundle: dict) -> str:
     )
 
 
-def analyze_inputs(inputs: list[dict], excluded_file_types: list[str]) -> dict:
+def analyze_inputs(inputs: list[dict]) -> dict:
     """Single pass: walk events in order, building the timeline as we go.
 
     Events arrive chronologically, so timeline entries are already sorted —
@@ -399,15 +321,12 @@ def analyze_inputs(inputs: list[dict], excluded_file_types: list[str]) -> dict:
     pasted_fragments: dict[str, list[int]] = {}
 
     for event in inputs:
-        if any(event.get("document", "").endswith(ext) for ext in excluded_file_types):
-            continue
-
-        ts = _parse_ts(event["timestamp"])
+        ts = parse_ts(event["timestamp"])
         if start_time is None:
             start_time = ts
         end_time = ts
 
-        kind = _event_kind(event)
+        kind = event_kind(event)
         if kind == "focusStatus":
             if event.get("focused") is False and unfocused_since is None:
                 unfocused_since = ts
@@ -425,8 +344,6 @@ def analyze_inputs(inputs: list[dict], excluded_file_types: list[str]) -> dict:
             total_edits += 1
             old_fragment = event.get("oldFragment", "")
 
-            # If this delete matches a previously-recorded paste, retroactively cancel
-            # that paste — the student pasted something then discarded it.
             cancelled_paste = False
             if old_fragment and pasted_fragments.get(old_fragment):
                 timeline[pasted_fragments[old_fragment].pop(0)] = None
@@ -435,7 +352,7 @@ def analyze_inputs(inputs: list[dict], excluded_file_types: list[str]) -> dict:
             if not cancelled_paste and len(old_fragment) > 1:
                 deleted_fragments[old_fragment] = deleted_fragments.get(old_fragment, 0) + 1
 
-            if _is_generated_edit(event):
+            if is_generated_edit(event):
                 fragment = event["newFragment"]
                 if deleted_fragments.get(fragment, 0) > 0:
                     deleted_fragments[fragment] -= 1
@@ -469,14 +386,10 @@ def analyze_inputs(inputs: list[dict], excluded_file_types: list[str]) -> dict:
     }
 
 
-def _format_ts(ts: datetime) -> str:
-    return ts.strftime("%Y-%m-%d %H:%M:%S")
-
-
 def _format_entry(entry: dict) -> str:
-    stamp = _format_ts(entry["timestamp"])
+    stamp = format_ts(entry["timestamp"])
     if entry["kind"] == "focus":
-        return f"  [{stamp}] Lost focus for {_format_duration(entry['duration'])}"
+        return f"  [{stamp}] Lost focus for {format_duration(entry['duration'])}"
     label = "IDE Action" if entry["kind"] == "ide_action" else "Paste"
     body = "\n".join(f"      | {line}" for line in entry["fragment"].splitlines() or [""])
     return (
@@ -490,24 +403,22 @@ def print_timeline(results: dict) -> str:
     unfocused = results["total_time_unfocused"]
     entries = "\n".join(_format_entry(e) for e in results["timeline"])
     return(
-        f"Total Time:        {_format_duration(total)}\n"
-        f"Time Focused:      {_format_duration(total - unfocused)}\n"
-        f"Time Unfocused:    {_format_duration(unfocused)}\n"
+        f"Total Time:        {format_duration(total)}\n"
+        f"Time Focused:      {format_duration(total - unfocused)}\n"
+        f"Time Unfocused:    {format_duration(unfocused)}\n"
         f"IDE Actions:       {results['total_ide_actions']}\n"
         f"Pastes:            {results['total_pastes']}\n"
         f"\n"
         f"Timeline of Key Moments:\n"
-        f"  [{_format_ts(results['start_time'])}] Recording Started"
+        f"  [{format_ts(results['start_time'])}] Recording Started"
         f"{('\n' + entries) if entries else ''}"
     )
 
 
 def main(recording_file: Path, excluded_file_types: list[str], output:Path = None, _json: bool = False, view: bool = False):
-    opener = gzip.open if recording_file.suffix == ".gz" else open
-    with opener(recording_file, "rt") as f:
-        inputs = [json.loads(line) for line in f]
+    inputs = load_recording(recording_file, excluded_file_types)
 
-    results = analyze_inputs(inputs, excluded_file_types)
+    results = analyze_inputs(inputs)
 
     if _json:
         results = json.dumps(results, default=str, indent=4)
@@ -521,7 +432,7 @@ def main(recording_file: Path, excluded_file_types: list[str], output:Path = Non
         print(results)
 
     if view:
-        bundle = _build_playback_bundle(inputs, excluded_file_types)
+        bundle = _build_playback_bundle(inputs)
         html = _render_player_html(bundle)
         stem = recording_file.with_suffix("") if recording_file.suffix == ".gz" else recording_file
         html_path = stem.with_suffix(stem.suffix + ".html") if stem.suffix else stem.with_suffix(".html")
