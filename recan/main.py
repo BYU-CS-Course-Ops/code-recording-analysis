@@ -485,11 +485,11 @@ def _format_entry(entry: dict) -> str:
     )
 
 
-def print_timeline(results: dict) -> None:
+def print_timeline(results: dict) -> str:
     total = results["total_time"]
     unfocused = results["total_time_unfocused"]
     entries = "\n".join(_format_entry(e) for e in results["timeline"])
-    print(
+    return(
         f"Total Time:        {_format_duration(total)}\n"
         f"Time Focused:      {_format_duration(total - unfocused)}\n"
         f"Time Unfocused:    {_format_duration(unfocused)}\n"
@@ -502,21 +502,25 @@ def print_timeline(results: dict) -> None:
     )
 
 
-def analyze_recording(recording_file: Path, excluded_file_types: list[str], output:Path = None, verbose: bool = False, visualize: bool = False):
+def main(recording_file: Path, excluded_file_types: list[str], output:Path = None, _json: bool = False, view: bool = False):
     opener = gzip.open if recording_file.suffix == ".gz" else open
     with opener(recording_file, "rt") as f:
         inputs = [json.loads(line) for line in f]
 
     results = analyze_inputs(inputs, excluded_file_types)
 
+    if _json:
+        results = json.dumps(results, default=str, indent=4)
+    else:
+        results = print_timeline(results)
+
     if output:
         with open(output, "w") as f:
-            json.dump(results, f, default=str, indent=4)
+            f.write(results)
+    else:
+        print(results)
 
-    if verbose:
-        print_timeline(results)
-
-    if visualize:
+    if view:
         bundle = _build_playback_bundle(inputs, excluded_file_types)
         html = _render_player_html(bundle)
         stem = recording_file.with_suffix("") if recording_file.suffix == ".gz" else recording_file
@@ -524,21 +528,19 @@ def analyze_recording(recording_file: Path, excluded_file_types: list[str], outp
         html_path.write_text(html, encoding="utf-8")
         print(f"Wrote playback HTML to {html_path}")
 
-    if not (output or visualize or verbose):
-        return results
 
 
-def main():
+def entry():
     parser = ArgumentParser(description="Analyze IDE recording files.")
     parser.add_argument("recording_file", type=Path, help="Path to the recording file (JSONL or gzipped JSONL).")
     parser.add_argument("--exclude", nargs="*", default=[], help="List of file extensions to exclude (e.g. .html .md).")
-    parser.add_argument("--output", type=Path, help="Path to save the analysis results (e.g. as JSON).")
-    parser.add_argument("--verbose", action="store_true", help="Print detailed timeline of events.")
-    parser.add_argument("--visualize", action="store_true", help="Generate a visualization of the timeline.")
+    parser.add_argument("--output", type=Path, help="Path to write the analysis results (defaults to stdout).")
+    parser.add_argument("--json", action="store_true", help="Output the analysis results as JSON instead of human-readable text.")
+    parser.add_argument("--view", action="store_true", help="Generate a visualization of the timeline.")
 
     args = parser.parse_args()
 
-    analyze_recording(args.recording_file, args.exclude, args.output, args.verbose, args.visualize)
+    main(args.recording_file, args.exclude, args.output, args.json, args.view)
 
 if __name__ == "__main__":
-    main()
+    entry()

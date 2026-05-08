@@ -7,7 +7,7 @@ import zlib
 from pathlib import Path
 from argparse import ArgumentParser
 
-from analyze import analyze_inputs
+from main import analyze_inputs
 
 
 EXCLUDED_FILE_TYPES = ['.html']
