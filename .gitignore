@@ -1,9 +1,17 @@
-.superpowers/
+# Python
 __pycache__/
 *.pyc
-/samples/
-.DS_Store
-.idea
-*.csv
+
+# Build / packaging
+dist/
 poetry.lock
-dist
+
+# IDE / editor
+.idea/
+
+# OS
+.DS_Store
+
+# Project
+/samples/
+*.csv
