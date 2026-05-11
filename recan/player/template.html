@@ -1,53 +1,149 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Recording Playback — {{ document_name }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>{{ css }}</style>
+  <script>
+    // apply theme as early as possible to avoid FOUC
+    (function () {
+      try {
+        var t = localStorage.getItem("playback-theme");
+        if (t === "dark" || t === "light") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
-    <main class="player-main">
-      <header class="topbar">
-        <span class="filename" id="filename"></span>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">⏵</div>
+        <div>
+          <div>Code Playback</div>
+          <div class="brand-sub">Submission review</div>
+        </div>
+      </div>
+
+      <div class="file-info">
+        <span class="filename" id="filename" title=""></span>
         <span class="lang-pill" id="lang-pill"></span>
-      </header>
-      <section class="editor-wrap">
-        <pre class="editor"><code id="editor-code" class="language-plaintext"></code></pre>
-        <div class="unfocused-overlay" id="unfocused-overlay" hidden>
-          <div class="unfocused-badge">
-            <span class="dot"></span>
-            <span>Window unfocused · <span id="unfocused-elapsed">0:00</span></span>
-          </div>
+      </div>
+
+      <div class="topbar-right">
+        <button class="icon-btn" id="help-btn" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5"></path>
+            <circle cx="12" cy="17" r="0.6" fill="currentColor"></circle>
+          </svg>
+        </button>
+        <button class="icon-btn theme-toggle" id="theme-btn" title="Toggle light / dark" aria-label="Toggle theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+          </svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="editor-wrap" id="editor-wrap">
+      <div class="editor-summary" id="editor-summary">
+        <span class="es-chip"><span>Edits</span><strong id="sum-edits">0</strong></span>
+        <span class="es-chip burst"><span class="swatch"></span><span>Bursts</span><strong id="sum-bursts">0</strong></span>
+        <span class="es-chip unfocused"><span class="swatch"></span><span>Unfocused</span><strong id="sum-unfocused">0</strong></span>
+        <span class="es-chip idle"><span class="swatch"></span><span>Idle gaps</span><strong id="sum-idle">0</strong></span>
+        <span class="es-progress" id="es-progress">0%</span>
+      </div>
+
+      <pre class="editor"><code id="editor-code" class="language-plaintext"></code></pre>
+
+      <div class="burst-banner" id="burst-banner">Rapid input · possible paste</div>
+
+      <div class="unfocused-overlay" id="unfocused-overlay" hidden>
+        <div class="unfocused-card">
+          <div class="label">Window unfocused</div>
+          <div class="elapsed" id="unfocused-elapsed">0:00</div>
+          <div class="hint">Student switched away from the editor</div>
         </div>
-      </section>
-      <section class="timeline">
-        <div class="timeline-track" id="timeline-track">
-          <div class="markers" id="timeline-markers"></div>
-          <div class="playhead" id="playhead"></div>
+      </div>
+    </section>
+
+    <section class="timeline">
+      <div class="timeline-track" id="timeline-track">
+        <div class="progress-fill" id="progress-fill"></div>
+        <div class="markers" id="timeline-markers"></div>
+        <div class="playhead" id="playhead"></div>
+        <div class="timeline-tooltip" id="timeline-tooltip"></div>
+      </div>
+
+      <div class="timeline-legend" aria-hidden="true">
+        <span class="legend-item"><span class="legend-swatch idle"></span>Idle (thinking)</span>
+        <span class="legend-item"><span class="legend-swatch unfocused"></span>Unfocused (switched away)</span>
+        <span class="legend-item"><span class="legend-swatch burst"></span>Burst (rapid input)</span>
+      </div>
+
+      <div class="transport">
+        <div class="transport-side left">
+          <select class="speed" id="speed" aria-label="Playback speed">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="5">5×</option>
+            <option value="10">10×</option>
+            <option value="20">20×</option>
+          </select>
+          <label class="skip-idle">
+            <input type="checkbox" id="skip-idle">
+            <span>Skip idle</span>
+          </label>
         </div>
-        <div class="transport">
-          <div class="transport-left">
-            <button class="play-btn" id="play-btn" aria-label="Play">▶</button>
-            <select class="speed" id="speed">
-              <option value="0.5">0.5×</option>
-              <option value="1" selected>1×</option>
-              <option value="2">2×</option>
-              <option value="5">5×</option>
-            </select>
-          </div>
-          <div class="time">
+
+        <div class="transport-center">
+          <button class="transport-btn unfocused" id="prev-unfocused" title="Previous unfocused (Shift+[)" aria-label="Previous unfocused">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5v11M13 2.5l-8 5.5 8 5.5z"/></svg>
+            <span>Unfocused</span>
+          </button>
+          <button class="transport-btn burst" id="prev-burst" title="Previous burst ([)" aria-label="Previous burst">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5v11M13 2.5l-8 5.5 8 5.5z"/></svg>
+            <span>Burst</span>
+          </button>
+          <button class="play-btn" id="play-btn" aria-label="Play">
+            <svg viewBox="0 0 16 16" id="play-icon"><path d="M4 2.5v11l9-5.5z"/></svg>
+          </button>
+          <button class="transport-btn burst" id="next-burst" title="Next burst (])" aria-label="Next burst">
+            <span>Burst</span>
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2.5v11M3 2.5l8 5.5-8 5.5z"/></svg>
+          </button>
+          <button class="transport-btn unfocused" id="next-unfocused" title="Next unfocused (Shift+])" aria-label="Next unfocused">
+            <span>Unfocused</span>
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2.5v11M3 2.5l8 5.5-8 5.5z"/></svg>
+          </button>
+        </div>
+
+        <div class="transport-side right">
+          <span class="kbd-hint"><span class="kbd">Space</span>play <span class="kbd">←</span><span class="kbd">→</span>scrub</span>
+          <span class="time">
             <span class="now" id="now-time">—</span>
             <span class="total" id="total-time"> / —</span>
-          </div>
+          </span>
         </div>
-      </section>
-    </main>
-    <aside class="stats" id="stats"></aside>
+      </div>
+    </section>
+
+    <aside class="stats" id="stats">
+      <!-- Filled by JS -->
+    </aside>
   </div>
 
   <script>{{ highlight }}</script>

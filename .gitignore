@@ -16,5 +16,10 @@ poetry.lock
 /samples/
 *.csv
 
-# Agent
-docs
+# Agentic
+.claude/
+.codex/
+.superpowers/
+docs/
+
+# Other
