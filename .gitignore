@@ -21,5 +21,6 @@ poetry.lock
 .codex/
 .superpowers/
 docs/
+.playwright-cli
 
 # Other
