@@ -15,3 +15,6 @@ poetry.lock
 # Project
 /samples/
 *.csv
+
+# Agent
+docs
