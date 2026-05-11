@@ -23,4 +23,6 @@ poetry.lock
 docs/
 .playwright-cli
 
-# Other
+# Samples
+*.gz
+*.jsonl

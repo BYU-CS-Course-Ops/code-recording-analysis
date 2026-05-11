@@ -18,6 +18,10 @@ poetry-version-from-file = "^1.1.0"
 enabled = "true"
 file = "recan/VERSION"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [tool.poetry.scripts]
 recan = "recan.main:entry"
 

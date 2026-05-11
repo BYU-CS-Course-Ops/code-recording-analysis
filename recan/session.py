@@ -12,6 +12,7 @@ from recan.utils import (
     apply_edit,
     event_kind,
     is_generated_edit,
+    is_ide_action,
     language_from_extension,
     parse_ts,
 )
@@ -148,7 +149,7 @@ def analyze_inputs(inputs: list[dict]) -> Session:
     def flush_group():
         if not group:
             return
-        kind_label = "ide_action" if len(group) > 1 else "paste"
+        kind_label = "ide_action" if is_ide_action(group[-1]["fragment"]) else "paste"
         kept = group[-1]
         bursts.append({
             "kind": kind_label,

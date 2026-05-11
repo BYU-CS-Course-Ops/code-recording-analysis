@@ -7,6 +7,7 @@
 - [ ] Better markdown template for the autograder view of the timeline
 - [ ] Add a bit more guidance to the README
 - [ ] Notify in the code-recorder CICD Discord channel (reuse the plugins channel) on new builds
+- [ ] Organize the flags on the side bar of the playback view. E.g. group "IDE actions" together, "copy-paste" together, etc.
 
 # Investigate
 
@@ -17,7 +18,8 @@
 
 # Bugs
 
-- [ ] Unfocused timer does not increment in the playback view
+- [x] Unfocused timer does not increment in the playback view
+- [ ] Persist settings when closing and reopening the html
 
 # Feature Requests
 
