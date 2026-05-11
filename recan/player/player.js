@@ -17,6 +17,11 @@ const STATE = {
   summary:         BUNDLE.summary,
 
   playheadIdx: 0,
+  // Wall-clock seconds elapsed since arriving at the current event index, in
+  // the visual timeline (real time, unless skipIdle compresses idle gaps).
+  // Lets the UI advance smoothly through gaps where no events fire — e.g. the
+  // unfocused-overlay timer counting up while the playhead sits on blur_idx.
+  subStepSec: 0,
   playing: false,
   speed: 1,
   document: "",
@@ -305,23 +310,22 @@ function renderTimeReadout() {
 
 let lastTick = 0;
 let rafId = null;
-let accumBudget = 0;
 
 function tick(now) {
   if (!STATE.playing) return;
   if (lastTick === 0) lastTick = now;
   const dtMs = now - lastTick;
   lastTick = now;
-  accumBudget += (dtMs / 1000) * STATE.speed;
+  STATE.subStepSec += (dtMs / 1000) * STATE.speed;
 
   while (STATE.playheadIdx < STATE.events.length - 1) {
     const cur = STATE.playheadIdx >= 0 ? VISUAL.offsets[STATE.playheadIdx] : 0;
     const nextIdx = STATE.playheadIdx + 1;
     const next = VISUAL.offsets[nextIdx];
     const step = next - cur;
-    if (step <= accumBudget) {
+    if (step <= STATE.subStepSec) {
       stepForward();
-      accumBudget -= step;
+      STATE.subStepSec -= step;
     } else {
       break;
     }
@@ -349,7 +353,6 @@ function setPlaying(p) {
   $("play-btn").setAttribute("aria-label", p ? "Pause" : "Play");
   if (p) {
     lastTick = 0;
-    accumBudget = 0;
     rafId = requestAnimationFrame(tick);
   } else if (rafId) {
     cancelAnimationFrame(rafId);
@@ -363,6 +366,7 @@ function scrubToIdx(idx) {
   idx = Math.max(0, Math.min(idx, STATE.events.length - 1));
   if (STATE.playing) setPlaying(false);
   STATE.playheadIdx = idx;
+  STATE.subStepSec = 0;
   rebuildDocumentTo(idx);
   renderEditor();
   renderPlayhead();
@@ -388,6 +392,7 @@ function scrubToClientX(clientX) {
   const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
   const idx = visualPctToEventIdx(pct);
   STATE.playheadIdx = idx;
+  STATE.subStepSec = 0;
   rebuildDocumentTo(idx);
   renderEditor();
   renderPlayhead();
@@ -459,15 +464,26 @@ function updateUnfocusedOverlay() {
 
   const idx = STATE.playheadIdx;
   let active = null;
+  // Cumulative unfocused time from all completed gaps before the current one.
+  // focusIntervals are in chronological order, so anything we walk past before
+  // finding `active` has already finished.
+  let priorSec = 0;
   for (const fi of STATE.focusIntervals) {
     if (idx >= fi.blur_idx && idx < fi.focus_idx) { active = fi; break; }
+    priorSec += VISUAL.offsets[fi.focus_idx] - VISUAL.offsets[fi.blur_idx];
   }
   if (!active) { overlay.hidden = true; return; }
 
   overlay.hidden = false;
-  const blurT = Date.parse(STATE.events[active.blur_idx].timestamp);
-  const nowT = Date.parse(STATE.events[Math.max(0, idx)].timestamp);
-  const elapsedSec = Math.max(0, Math.round((nowT - blurT) / 1000));
+  // The playhead sits on blur_idx for the entire gap (the next event is
+  // focus_idx), so subtracting event timestamps would always give 0. Use the
+  // visual offset plus the within-step accumulator instead — it tracks real
+  // seconds elapsed since arriving at the current event index. Add prior
+  // completed gaps so the overlay reads as a session-wide running tally.
+  const blurOffset = VISUAL.offsets[active.blur_idx];
+  const curOffset  = VISUAL.offsets[Math.max(0, idx)] + STATE.subStepSec;
+  const currentGapSec = Math.max(0, curOffset - blurOffset);
+  const elapsedSec = Math.round(priorSec + currentGapSec);
   const m = Math.floor(elapsedSec / 60);
   const s = elapsedSec % 60;
   elapsedEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
@@ -551,7 +567,7 @@ $("skip-idle").addEventListener("change", (e) => {
   VISUAL = computeVisual();
   renderTimelineMarkers();
   renderPlayhead();
-  accumBudget = 0;
+  STATE.subStepSec = 0;
 });
 
 $("theme-btn").addEventListener("click", toggleTheme);
