@@ -7,7 +7,7 @@ license = "MIT"
 packages = [{ include = "recan" }]
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.12"
 Jinja2 = "^3.1.6"
 
 [tool.poetry.group.dev.dependencies]

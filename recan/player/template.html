@@ -60,15 +60,15 @@
     <section class="editor-wrap" id="editor-wrap">
       <div class="editor-summary" id="editor-summary">
         <span class="es-chip"><span>Edits</span><strong id="sum-edits">0</strong></span>
-        <span class="es-chip burst"><span class="swatch"></span><span>Bursts</span><strong id="sum-bursts">0</strong></span>
+        <span class="es-chip ide-action"><span class="swatch"></span><span>IDE actions</span><strong id="sum-ide-actions">0</strong></span>
+        <span class="es-chip paste"><span class="swatch"></span><span>Pastes</span><strong id="sum-pastes">0</strong></span>
         <span class="es-chip unfocused"><span class="swatch"></span><span>Unfocused</span><strong id="sum-unfocused">0</strong></span>
         <span class="es-chip idle"><span class="swatch"></span><span>Idle gaps</span><strong id="sum-idle">0</strong></span>
-        <span class="es-progress" id="es-progress">0%</span>
       </div>
 
-      <pre class="editor"><code id="editor-code" class="language-plaintext"></code></pre>
+      <pre class="editor" id="editor"><div class="line-gutter" id="line-gutter">1</div><code id="editor-code" class="language-plaintext"></code><div class="edit-highlight-layer" id="edit-highlight-layer" aria-hidden="true"></div></pre>
 
-      <div class="burst-banner" id="burst-banner">Rapid input · possible paste</div>
+      <div class="burst-banner" id="burst-banner"><span id="burst-banner-text">Event</span></div>
 
       <div class="unfocused-overlay" id="unfocused-overlay" hidden>
         <div class="unfocused-card">
@@ -90,7 +90,8 @@
       <div class="timeline-legend" aria-hidden="true">
         <span class="legend-item"><span class="legend-swatch idle"></span>Idle (thinking)</span>
         <span class="legend-item"><span class="legend-swatch unfocused"></span>Unfocused (switched away)</span>
-        <span class="legend-item"><span class="legend-swatch burst"></span>Burst (rapid input)</span>
+        <span class="legend-item"><span class="legend-swatch ide-action"></span>IDE action</span>
+        <span class="legend-item"><span class="legend-swatch paste"></span>Paste</span>
       </div>
 
       <div class="transport">
