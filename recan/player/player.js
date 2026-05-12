@@ -17,6 +17,7 @@ const STATE = {
   summary:         BUNDLE.summary,
 
   playheadIdx: 0,
+  playheadPct: 0,        // continuous visual position 0..100, decoupled from event idx
   playing: false,
   speed: 1,
   document: "",
@@ -58,7 +59,17 @@ function stepForward() {
   STATE.playheadIdx += 1;
   const ev = STATE.events[STATE.playheadIdx];
   if (ev.type === "edit") {
+    const oldLen = ev.oldFragment?.length || 0;
+    const newLen = ev.newFragment?.length || 0;
+    transformLiveEdits(ev.offset, oldLen, newLen);
     STATE.document = applyEdit(STATE.document, ev.offset, ev.oldFragment, ev.newFragment);
+    // Fire a single live highlight when we hit a burst's apex idx — the
+    // moment when the burst's inserted content has the most chars alive in
+    // the document. We pull the range from the precomputed apex map so an
+    // IDE template that types/erases/retypes doesn't strobe; the user sees
+    // ONE flash covering the canonical fragment region.
+    const apex = BURST_APEX_BY_IDX.get(STATE.playheadIdx);
+    if (apex) addLiveBurstHighlight(apex.burst.kind, apex.start, apex.end - apex.start);
   }
   return true;
 }
@@ -100,6 +111,19 @@ function renderEditor() {
     delete codeEl.dataset.highlighted;
     try { window.hljs.highlightElement(codeEl); } catch (e) { /* noop */ }
   }
+  renderLineGutter();
+}
+
+function renderLineGutter() {
+  const g = $("line-gutter");
+  if (!g) return;
+  const doc = STATE.document;
+  // Count visual lines (always at least 1).
+  let lines = 1;
+  for (let i = 0; i < doc.length; i++) if (doc.charCodeAt(i) === 10) lines++;
+  let out = "";
+  for (let i = 1; i <= lines; i++) out += (i === 1 ? "" : "\n") + i;
+  g.textContent = out;
 }
 
 function renderTopbar() {
@@ -113,10 +137,25 @@ function renderTopbar() {
 /* ---------- editor summary chips ---------- */
 
 function renderSummaryChips() {
-  $("sum-edits").textContent     = STATE.summary.edit_count;
-  $("sum-bursts").textContent    = STATE.summary.burst_count;
-  $("sum-unfocused").textContent = fmtDuration(STATE.summary.unfocused_seconds);
-  $("sum-idle").textContent      = String(STATE.idleGaps.length);
+  $("sum-edits").textContent       = STATE.summary.edit_count;
+  $("sum-ide-actions").textContent = STATE.summary.ide_action_count ?? 0;
+  $("sum-pastes").textContent      = STATE.summary.paste_count ?? 0;
+  $("sum-unfocused").textContent   = fmtDuration(STATE.summary.unfocused_seconds);
+  $("sum-idle").textContent        = String(STATE.idleGaps.length);
+}
+
+/* ---------- kind helpers ---------- */
+
+function kindClass(k) { return (k || "").replace(/_/g, "-"); }
+function kindLabel(k) {
+  if (k === "ide_action") return "IDE action";
+  if (k === "paste")      return "Paste";
+  return "Event";
+}
+function kindIcon(k) {
+  if (k === "ide_action") return "A";
+  if (k === "paste")      return "P";
+  return "!";
 }
 
 /* ---------- stats sidebar ---------- */
@@ -154,13 +193,17 @@ function renderStatsSidebar() {
           <span class="stat-value">${STATE.summary.edit_count}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Bursts</span>
-          <span class="stat-value">${STATE.summary.burst_count}</span>
+          <span class="stat-label">IDE actions</span>
+          <span class="stat-value">${STATE.summary.ide_action_count ?? 0}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Pastes</span>
+          <span class="stat-value">${STATE.summary.paste_count ?? 0}</span>
         </div>
       </div>
     </div>
     <div class="stats-section">
-      <div class="stats-section-title">Flags <span style="color:var(--fg-subtle);font-weight:500;letter-spacing:0">${STATE.bursts.length + STATE.focusIntervals.length}</span></div>
+      <div class="stats-section-title">Key moments <span style="color:var(--fg-subtle);font-weight:500;letter-spacing:0">${STATE.bursts.length + STATE.focusIntervals.length}</span></div>
       <div class="flags" id="flags-list"></div>
     </div>
   `;
@@ -172,64 +215,553 @@ function renderFlagsList() {
   const host = $("flags-list");
   if (!host) return;
 
-  const items = [];
-  // bursts
-  STATE.bursts.forEach((b, i) => {
+  // Bucket events by kind so we can render collapsible groups.
+  const groups = {
+    ide_action: { kind: "ide_action", cssKind: "ide-action", label: "IDE actions", icon: "A", items: [] },
+    paste:      { kind: "paste",      cssKind: "paste",      label: "Pastes",      icon: "P", items: [] },
+    unfocused:  { kind: "unfocused",  cssKind: "unfocused",  label: "Unfocused",   icon: "↗", items: [] },
+  };
+
+  const counters = { ide_action: 0, paste: 0 };
+  STATE.bursts.forEach((b) => {
     const startT = STATE.events[b.start_idx]?.timestamp;
     const dur = b.end_idx > b.start_idx
       ? (Date.parse(STATE.events[b.end_idx].timestamp) - Date.parse(STATE.events[b.start_idx].timestamp)) / 1000
       : 0;
-    items.push({
-      kind: "burst",
-      title: `Burst #${i + 1}`,
-      meta: `${fmtDuration(dur)} · ${(b.end_idx - b.start_idx + 1)} edits`,
-      idx: b.start_idx,
-      sortT: Date.parse(startT || STATE.meta.start_time),
+    const k = b.kind || "paste";
+    counters[k] = (counters[k] || 0) + 1;
+    const elapsed = (Date.parse(startT || STATE.meta.start_time) - Date.parse(STATE.meta.start_time)) / 1000;
+    // char_count comes from the session summary — it's the canonical size of
+    // the burst's inserted fragment, NOT the number of edit events. Showing
+    // "5 edits" is misleading for IDE actions that type/delete/retype.
+    // Different summary builds use different key names (char_count vs chars,
+    // and may omit fragment), so fall back through several sources before
+    // computing from the precomputed apex range as a last resort.
+    let chars = b.char_count ?? b.chars;
+    if (chars == null && b.fragment) chars = b.fragment.length;
+    if (chars == null) {
+      const apex = BURST_APEX_BY_IDX.get(b.end_idx)
+                || [...BURST_APEX_BY_IDX.values()].find((a) => a.burst === b);
+      if (apex) chars = apex.end - apex.start;
+    }
+    if (chars == null) chars = (b.end_idx - b.start_idx + 1);
+    (groups[k] || groups.paste).items.push({
+      title: `${kindLabel(k)} #${counters[k]}`,
+      meta: `+${fmtDuration(elapsed)} · ${chars} char${chars === 1 ? "" : "s"}`,
+      idx: b.end_idx,
+      burstIdx: STATE.bursts.indexOf(b),
     });
   });
-  // unfocused
+
   STATE.focusIntervals.forEach((fi, i) => {
     const startT = STATE.events[fi.blur_idx]?.timestamp;
     const dur = fi.focus_idx > fi.blur_idx
       ? (Date.parse(STATE.events[fi.focus_idx].timestamp) - Date.parse(STATE.events[fi.blur_idx].timestamp)) / 1000
       : 0;
-    items.push({
-      kind: "unfocused",
+    const elapsed = (Date.parse(startT || STATE.meta.start_time) - Date.parse(STATE.meta.start_time)) / 1000;
+    groups.unfocused.items.push({
       title: `Unfocused #${i + 1}`,
-      meta: `${fmtDuration(dur)} away`,
+      meta: `+${fmtDuration(elapsed)} · ${fmtDuration(dur)} away`,
       idx: fi.blur_idx,
-      sortT: Date.parse(startT || STATE.meta.start_time),
     });
   });
 
-  if (items.length === 0) {
+  const total = Object.values(groups).reduce((n, g) => n + g.items.length, 0);
+  if (total === 0) {
     host.innerHTML = `<div class="flag-empty">No anomalies detected — looks like a clean session.</div>`;
     return;
   }
 
-  items.sort((a, b) => a.sortT - b.sortT);
+  // Auto-open small groups; collapse big ones to keep the sidebar tidy.
+  const renderGroup = (g) => {
+    if (!g.items.length) return "";
+    const open = g.items.length <= 4 ? " open" : "";
+    const flags = g.items.map((it) => `
+      <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}>
+        <span class="flag-icon">${g.icon}</span>
+        <span class="flag-body">
+          <span class="flag-title">${it.title}</span>
+          <span class="flag-meta">${it.meta}</span>
+        </span>
+      </button>`).join("");
+    return `
+      <details class="flag-group ${g.cssKind}"${open}>
+        <summary>
+          <span class="fg-chev" aria-hidden="true">▸</span>
+          <span class="fg-label">${g.label}</span>
+          <span class="fg-count">${g.items.length}</span>
+        </summary>
+        <div class="flag-group-body">${flags}</div>
+      </details>`;
+  };
 
-  host.innerHTML = items.map((it) => `
-    <button class="flag ${it.kind}" data-idx="${it.idx}">
-      <span class="flag-icon">${it.kind === "burst" ? "!" : "↗"}</span>
-      <span class="flag-body">
-        <span class="flag-title">${it.title}</span>
-        <span class="flag-meta">${it.meta}</span>
-      </span>
-    </button>
-  `).join("");
+  host.innerHTML = [groups.ide_action, groups.paste, groups.unfocused].map(renderGroup).join("");
 
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = parseInt(btn.getAttribute("data-idx"), 10);
+      const bAttr = btn.getAttribute("data-burst");
+      if (bAttr != null) {
+        const burst = STATE.bursts[parseInt(bAttr, 10)];
+        if (burst) {
+          // Scrub to the apex of the burst (where the most inserted chars
+          // are alive at once) so placeholder text like `pass` is visible
+          // before the burst's own cleanup events erase it.
+          const apex = computeBurstApex(burst);
+          scrubToIdx(apex ? apex.apexIdx : idx);
+          highlightBurstFragment(burst, apex);
+          return;
+        }
+      }
       scrubToIdx(idx);
     });
+  });
+}
+
+/* ---------- fragment highlight (click-triggered, auto-clears on next scrub) ---------- */
+
+function clearFragmentHighlight() {
+  if (!window.CSS || !CSS.highlights) return;
+  CSS.highlights.delete("burst-fragment-ide");
+  CSS.highlights.delete("burst-fragment-paste");
+}
+
+/* ---------- live edit highlights (playback-driven, fade after ~1s) ----------
+
+   As the playhead crosses each edit event we push a {kind, start, end,
+   createdAt} entry onto liveEdits[]. A RAF loop paints colored rectangles
+   over the corresponding text range (via Range.getClientRects) into a sibling
+   layer inside the <pre>, and fades each rect out over FADE_MS. Entries
+   surviving subsequent edits get their offsets shifted; entries whose text
+   was overwritten get dropped. */
+
+const liveEdits = [];
+const LIVE_HOLD_MS = 180;     // full opacity for first ~180ms (a noticeable pop)
+const LIVE_FADE_MS = 900;     // then fade out over ~900ms
+
+function kindForEventIdx(idx) {
+  for (const b of STATE.bursts) {
+    if (idx >= b.start_idx && idx <= b.end_idx) return b.kind || "paste";
+  }
+  return "edit";
+}
+
+function transformLiveEdits(offset, oldLen, newLen) {
+  const editEnd = offset + oldLen;
+  const delta = newLen - oldLen;
+  for (let i = liveEdits.length - 1; i >= 0; i--) {
+    const e = liveEdits[i];
+    if (e.end <= offset) continue;             // entirely before — unaffected
+    if (e.start >= editEnd) {                  // entirely after — shift both
+      e.start += delta;
+      e.end += delta;
+      continue;
+    }
+    // Edit lands fully inside the highlight — grow/shrink rather than drop.
+    // This is the common case when the IDE finishes a template by re-typing
+    // the placeholder "pass" inside the just-highlighted def.
+    if (e.start <= offset && editEnd <= e.end) {
+      e.end += delta;
+      if (e.end <= e.start) liveEdits.splice(i, 1);
+      continue;
+    }
+    // Other partial overlaps — too messy to map cleanly. Drop.
+    liveEdits.splice(i, 1);
+  }
+}
+
+function addLiveBurstHighlight(kind, offset, length) {
+  if (length <= 0) return;
+  liveEdits.push({
+    kind,
+    start: offset,
+    end: offset + length,
+    createdAt: performance.now(),
+  });
+  ensurePaintLoop();
+}
+
+function addLiveEdit(idx, offset, length) {
+  // Retained for back-compat (no current caller). Plain character edits no
+  // longer flash — only burst end_idx events trigger a highlight, via
+  // addLiveBurstHighlight() above.
+  if (length <= 0) return;
+  const kind = kindForEventIdx(idx);
+  if (kind !== "paste" && kind !== "ide_action") return;
+  liveEdits.push({
+    kind,
+    start: offset,
+    end: offset + length,
+    createdAt: performance.now(),
+  });
+  ensurePaintLoop();
+}
+
+function clearLiveEdits() {
+  liveEdits.length = 0;
+  const layer = $("edit-highlight-layer");
+  if (layer) layer.textContent = "";
+}
+
+let _paintRaf = 0;
+function ensurePaintLoop() {
+  if (_paintRaf) return;
+  const loop = () => {
+    paintLiveEdits();
+    if (liveEdits.length) {
+      _paintRaf = requestAnimationFrame(loop);
+    } else {
+      _paintRaf = 0;
+    }
+  };
+  _paintRaf = requestAnimationFrame(loop);
+}
+
+function paintLiveEdits() {
+  const layer = $("edit-highlight-layer");
+  if (!layer) return;
+  const now = performance.now();
+
+  // Prune expired
+  for (let i = liveEdits.length - 1; i >= 0; i--) {
+    if (now - liveEdits[i].createdAt > LIVE_HOLD_MS + LIVE_FADE_MS) {
+      liveEdits.splice(i, 1);
+    }
+  }
+
+  layer.textContent = "";
+  if (!liveEdits.length) return;
+
+  const editor = $("editor");
+  const codeEl = $("editor-code");
+  if (!editor || !codeEl) return;
+  const editorRect = editor.getBoundingClientRect();
+  const scrollLeft = editor.scrollLeft;
+  const scrollTop  = editor.scrollTop;
+  const docLen = STATE.document.length;
+
+  for (const e of liveEdits) {
+    const start = Math.max(0, Math.min(e.start, docLen));
+    const end   = Math.max(start, Math.min(e.end, docLen));
+    if (end <= start) continue;
+
+    const age = now - e.createdAt;
+    const opacity = age <= LIVE_HOLD_MS
+      ? 1
+      : Math.max(0, 1 - (age - LIVE_HOLD_MS) / LIVE_FADE_MS);
+
+    // Build a DOM Range over [start, end) inside editor-code's text nodes.
+    const range = document.createRange();
+    let pos = 0, startedAt = false, finished = false;
+    const walker = document.createTreeWalker(codeEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent.length;
+      if (!startedAt && pos + len > start) {
+        range.setStart(node, start - pos);
+        startedAt = true;
+      }
+      if (startedAt && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        finished = true;
+        break;
+      }
+      pos += len;
+    }
+    if (!startedAt) continue;
+    if (!finished) range.setEndAfter(codeEl.lastChild || codeEl);
+
+    const rects = range.getClientRects();
+    // hljs splits the line into multiple inline spans, which makes
+    // getClientRects return several rects per visual line. Drawing each one
+    // stacks the 18%-alpha tint and produces a darker patch over heavily
+    // tokenized substrings (e.g. `__main__`). Merge rects that share a line
+    // into a single span so the highlight reads as one flat block.
+    const merged = [];
+    const byLine = new Map();
+    for (let r = 0; r < rects.length; r++) {
+      const rect = rects[r];
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      const key = Math.round(rect.top) + ":" + Math.round(rect.bottom);
+      const cur = byLine.get(key);
+      if (cur) {
+        cur.left = Math.min(cur.left, rect.left);
+        cur.right = Math.max(cur.right, rect.right);
+      } else {
+        const entry = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        byLine.set(key, entry);
+        merged.push(entry);
+      }
+    }
+    const cls = "eh-rect eh-" + e.kind.replace(/_/g, "-");
+    for (const m of merged) {
+      const w = m.right - m.left;
+      const h = m.bottom - m.top;
+      if (w <= 0 || h <= 0) continue;
+      const box = document.createElement("div");
+      box.className = cls;
+      box.style.left   = (m.left - editorRect.left + scrollLeft) + "px";
+      box.style.top    = (m.top  - editorRect.top  + scrollTop ) + "px";
+      box.style.width  = w + "px";
+      box.style.height = h + "px";
+      box.style.opacity = String(opacity);
+      layer.appendChild(box);
+    }
+  }
+}
+
+// For a burst, find the event idx within [start_idx..end_idx] where the most
+// burst-origin chars are simultaneously alive in the document, plus the
+// contiguous range of those chars at that moment. This is what we want to
+// scrub the playhead to + highlight on click — it shows the FULL inserted
+// template (including placeholder text like `pass` that later gets deleted
+// in the same burst), not just the chars that survive to end_idx.
+function computeBurstApex(burst) {
+  const first = STATE.events[burst.start_idx];
+  if (!first) return null;
+
+  // Replay everything up to (but not including) start_idx using a snapshot
+  // when available so we know the pre-burst document state.
+  let doc = "";
+  const snap = findSnapshotAtOrBefore(burst.start_idx - 1);
+  let cursor;
+  if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
+  else      { doc = "";                  cursor = -1; }
+  for (let i = cursor + 1; i < burst.start_idx; i++) {
+    const ev = STATE.events[i];
+    if (ev.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
+  }
+
+  let origin = new Array(doc.length).fill(false);
+  let bestIdx = burst.start_idx;
+  let bestRange = null;
+  let bestCount = -1;
+
+  const measure = (idx) => {
+    let count = 0;
+    let runStart = -1, runEnd = -1, runLen = 0;
+    let i = 0;
+    while (i < origin.length) {
+      if (!origin[i]) { i++; continue; }
+      const s = i;
+      while (i < origin.length && origin[i]) i++;
+      const len = i - s;
+      count += len;
+      if (len > runLen) { runLen = len; runStart = s; runEnd = i; }
+    }
+    if (count > bestCount && runLen > 0) {
+      bestCount = count;
+      bestIdx = idx;
+      bestRange = { start: runStart, end: runEnd };
+    }
+  };
+
+  for (let i = burst.start_idx; i <= burst.end_idx; i++) {
+    const ev = STATE.events[i];
+    if (ev.type !== "edit") continue;
+    const oldLen = ev.oldFragment?.length || 0;
+    const newLen = ev.newFragment?.length || 0;
+    doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
+    const after = new Array(newLen).fill(true);
+    origin = [
+      ...origin.slice(0, ev.offset),
+      ...after,
+      ...origin.slice(ev.offset + oldLen),
+    ];
+    measure(i);
+  }
+
+  if (!bestRange) return null;
+  return { apexIdx: bestIdx, start: bestRange.start, end: bestRange.end };
+}
+
+function computeBurstRange(burst) {
+  // For a single-event burst (paste, or a single IDE template insertion) the
+  // visible inserted region is exactly the newFragment — using the *net*
+  // diff under-highlights when the event also deleted text (e.g. a paste
+  // that replaces a selection).
+  //
+  // For a multi-event IDE burst we walk the events forward and track which
+  // chars in the final document came from this burst. The earlier "net" math
+  // happened to work when bursts were pure insertions, but breaks as soon as
+  // the burst also deletes (very common for PyCharm live templates which
+  // type a stub, then erase it, then re-insert the cleaned form).
+  const first = STATE.events[burst.start_idx];
+  if (!first) return null;
+
+  if (burst.start_idx === burst.end_idx) {
+    const ev = first;
+    const newLen = ev.newFragment?.length || 0;
+    if (newLen <= 0) return null;
+    return { start: ev.offset, end: ev.offset + newLen };
+  }
+
+  // Simulate the burst on top of the pre-burst document so we know exactly
+  // where the burst's surviving text lives at end_idx.
+  let doc = "";
+  const snap = findSnapshotAtOrBefore(burst.start_idx - 1);
+  let cursor;
+  if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
+  else      { doc = "";                  cursor = -1; }
+  for (let i = cursor + 1; i < burst.start_idx; i++) {
+    const ev = STATE.events[i];
+    if (ev.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
+  }
+
+  // Track origin per char: an array of booleans the same length as doc,
+  // true where the char came from this burst.
+  let origin = new Array(doc.length).fill(false);
+  for (let i = burst.start_idx; i <= burst.end_idx; i++) {
+    const ev = STATE.events[i];
+    if (ev.type !== "edit") continue;
+    const oldLen = ev.oldFragment?.length || 0;
+    const newLen = ev.newFragment?.length || 0;
+    doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
+    const after = new Array(newLen).fill(true);   // freshly inserted by this burst
+    origin = [
+      ...origin.slice(0, ev.offset),
+      ...after,
+      ...origin.slice(ev.offset + oldLen),
+    ];
+  }
+
+  // Find the contiguous run(s) of burst-origin chars and pick the largest.
+  let bestStart = -1, bestEnd = -1, bestLen = 0;
+  let i = 0;
+  while (i < origin.length) {
+    if (!origin[i]) { i++; continue; }
+    const s = i;
+    while (i < origin.length && origin[i]) i++;
+    const len = i - s;
+    if (len > bestLen) { bestLen = len; bestStart = s; bestEnd = i; }
+  }
+  if (bestLen <= 0) return null;
+  return { start: bestStart, end: bestEnd };
+}
+
+function highlightBurstFragment(burst, apex) {
+  if (!(window.CSS && CSS.highlights && window.Highlight)) return;
+  clearFragmentHighlight();
+
+  const r = apex ? { start: apex.start, end: apex.end } : computeBurstRange(burst);
+  if (!r) return;
+  const { start, end } = r;
+  if (end <= start) return;
+
+  // Defer to the next frame so we run after any pending renderEditor() /
+  // hljs.highlightElement() inside scrubToIdx — otherwise the CSS Highlight
+  // can be set against text nodes that hljs is about to swap out, and the
+  // paint quietly drops.
+  requestAnimationFrame(() => {
+    const codeEl = $("editor-code");
+    const range = new Range();
+    let pos = 0, started = false;
+    const walker = document.createTreeWalker(codeEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent.length;
+      if (!started && pos + len > start) {
+        range.setStart(node, start - pos);
+        started = true;
+      }
+      if (started && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        const name = burst.kind === "ide_action" ? "burst-fragment-ide" : "burst-fragment-paste";
+        try {
+          CSS.highlights.set(name, new Highlight(range));
+        } catch (e) { /* noop */ }
+
+        // Bring the highlighted region into view if it's offscreen. Done
+        // separately so a scroll failure never kills the highlight.
+        try {
+          const rects = range.getClientRects();
+          if (rects.length) {
+            const editor = $("editor");
+            const eb = editor.getBoundingClientRect();
+            const top = rects[0].top - eb.top + editor.scrollTop;
+            if (top < editor.scrollTop || top > editor.scrollTop + editor.clientHeight - 40) {
+              editor.scrollTo({ top: Math.max(0, top - 80), behavior: "smooth" });
+            }
+          }
+        } catch (e) { /* noop */ }
+        return;
+      }
+      pos += len;
+    }
   });
 }
 
 /* ---------- visual timeline math ---------- */
 
 const IDLE_AFTER_IDX = new Set(STATE.idleGaps.map((g) => g.after_idx));
+
+// Pre-compute, for each burst, the smallest event idx where the burst's
+// canonical fragment (from session summary, or the first event's newFragment)
+// is fully present in the document. That's where we fire the live highlight
+// during playback — not the apex (which may sit inside an erase/retype mid-
+// burst sequence and get clobbered by subsequent burst events). For pastes
+// this is just the paste event itself. For IDE templates that type a stub,
+// delete it, retype the cleaned form, the highlight waits until the cleaned
+// form actually appears in the editor.
+const BURST_APEX_BY_IDX = (() => {
+  const map = new Map();
+  const MAX_LOOKAHEAD = 40;
+  for (const b of STATE.bursts) {
+    const fragment = b.fragment || STATE.events[b.start_idx]?.newFragment;
+    if (!fragment || fragment.length === 0) continue;
+
+    // Replay the document up through end_idx so we can search it.
+    let doc = "";
+    const snap = findSnapshotAtOrBefore(b.end_idx);
+    let cursor;
+    if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
+    else      { doc = ""; cursor = -1; }
+    for (let i = cursor + 1; i <= b.end_idx; i++) {
+      const ev = STATE.events[i];
+      if (ev?.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
+    }
+
+    let fireIdx = -1;
+    let pos = doc.indexOf(fragment);
+    if (pos >= 0) {
+      fireIdx = b.end_idx;
+    } else {
+      const limit = Math.min(b.end_idx + MAX_LOOKAHEAD, STATE.events.length - 1);
+      for (let i = b.end_idx + 1; i <= limit; i++) {
+        const ev = STATE.events[i];
+        if (ev?.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
+        pos = doc.indexOf(fragment);
+        if (pos >= 0) { fireIdx = i; break; }
+      }
+    }
+
+    if (fireIdx >= 0) {
+      map.set(fireIdx, {
+        burst: b,
+        apexIdx: fireIdx,
+        kind: b.kind || "paste",
+        start: pos,
+        end: pos + fragment.length,
+      });
+    } else {
+      // Fallback: best-effort apex range. Better SOMETHING than nothing.
+      try {
+        const apex = computeBurstApex(b);
+        if (apex) {
+          map.set(apex.apexIdx, {
+            burst: b,
+            apexIdx: apex.apexIdx,
+            kind: b.kind || "paste",
+            start: apex.start,
+            end: apex.end,
+          });
+        }
+      } catch (e) { /* swallow */ }
+    }
+  }
+  return map;
+})();
+
 let skipIdle = false;
 let VISUAL = computeVisual();
 
@@ -282,22 +814,37 @@ function renderTimelineMarkers() {
   }
   for (const burst of STATE.bursts) {
     const a = visualPctForIdx(burst.start_idx);
-    parts.push(`<div class="tick-burst" style="left:${a}%"></div>`);
+    parts.push(`<div class="tick-burst ${kindClass(burst.kind)}" style="left:${a}%"></div>`);
   }
   host.innerHTML = parts.join("");
 }
 
 function renderPlayhead() {
-  const idx = Math.max(0, STATE.playheadIdx);
-  const pct = visualPctForIdx(idx);
+  const pct = Math.max(0, Math.min(100, STATE.playheadPct));
   $("playhead").style.left = pct + "%";
   $("progress-fill").style.width = pct + "%";
-  $("es-progress").textContent = Math.round(pct) + "%";
 }
 
 function renderTimeReadout() {
-  const ev = STATE.playheadIdx >= 0 ? STATE.events[STATE.playheadIdx] : null;
-  $("now-time").textContent = ev ? formatAbsoluteTime(ev.timestamp) : formatAbsoluteTime(STATE.meta.start_time);
+  const idx = STATE.playheadIdx;
+  const ev = idx >= 0 ? STATE.events[idx] : null;
+  let t;
+  if (!ev) {
+    t = Date.parse(STATE.meta.start_time);
+  } else if (idx < STATE.events.length - 1) {
+    // Interpolate between this event and the next using the visual fraction
+    // so the time readout glides smoothly through long idle / unfocused gaps.
+    const cur = VISUAL.offsets[idx];
+    const next = VISUAL.offsets[idx + 1];
+    const target = (STATE.playheadPct / 100) * VISUAL.total;
+    const frac = next > cur ? Math.max(0, Math.min(1, (target - cur) / (next - cur))) : 0;
+    const t1 = Date.parse(ev.timestamp);
+    const t2 = Date.parse(STATE.events[idx + 1].timestamp);
+    t = t1 + (t2 - t1) * frac;
+  } else {
+    t = Date.parse(ev.timestamp);
+  }
+  $("now-time").textContent = formatAbsoluteTime(new Date(t).toISOString());
   $("total-time").textContent = " / " + formatAbsoluteTime(STATE.meta.end_time);
 }
 
@@ -314,18 +861,25 @@ function tick(now) {
   lastTick = now;
   accumBudget += (dtMs / 1000) * STATE.speed;
 
+  // Advance the smooth visual position by the elapsed budget.
+  const curBase = STATE.playheadIdx >= 0 ? VISUAL.offsets[STATE.playheadIdx] : 0;
+  let pos = (STATE.playheadPct / 100) * VISUAL.total;
+  if (pos < curBase) pos = curBase;
+  pos += accumBudget;
+  accumBudget = 0;
+  if (pos > VISUAL.total) pos = VISUAL.total;
+
+  // Apply any events we crossed.
   while (STATE.playheadIdx < STATE.events.length - 1) {
-    const cur = STATE.playheadIdx >= 0 ? VISUAL.offsets[STATE.playheadIdx] : 0;
     const nextIdx = STATE.playheadIdx + 1;
     const next = VISUAL.offsets[nextIdx];
-    const step = next - cur;
-    if (step <= accumBudget) {
+    if (next <= pos) {
       stepForward();
-      accumBudget -= step;
     } else {
       break;
     }
   }
+  STATE.playheadPct = VISUAL.total > 0 ? (pos / VISUAL.total) * 100 : 0;
 
   renderEditor();
   renderPlayhead();
@@ -362,22 +916,38 @@ function setPlaying(p) {
 function scrubToIdx(idx) {
   idx = Math.max(0, Math.min(idx, STATE.events.length - 1));
   if (STATE.playing) setPlaying(false);
+  const prev = STATE.playheadIdx;
   STATE.playheadIdx = idx;
+  STATE.playheadPct = visualPctForIdx(idx);
   rebuildDocumentTo(idx);
+  // Always clear on scrub. If we landed exactly on a burst's apex idx going
+  // forward, fire the burst highlight from the precomputed apex map (so an
+  // arrow-key step over a paste / IDE action still flashes the right region).
+  clearLiveEdits();
+  if (idx > prev) {
+    const apex = BURST_APEX_BY_IDX.get(idx);
+    if (apex) addLiveBurstHighlight(apex.burst.kind, apex.start, apex.end - apex.start);
+  }
   renderEditor();
   renderPlayhead();
   renderTimeReadout();
   updateUnfocusedOverlay();
+  _activeBurst = null;
+  clearFragmentHighlight();
+  maybeFlashBurst();
 }
 
+// Returns the FLOOR event idx for a visual percentage — the largest idx whose
+// offset is <= target. This lets the playhead sit *inside* idle / unfocused
+// gaps instead of snapping forward to the gap's end event.
 function visualPctToEventIdx(pct) {
   if (VISUAL.total <= 0 || !VISUAL.offsets.length) return -1;
   const target = (pct / 100) * VISUAL.total;
   let lo = 0, hi = VISUAL.offsets.length - 1;
   while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (VISUAL.offsets[mid] < target) lo = mid + 1;
-    else hi = mid;
+    const mid = (lo + hi + 1) >> 1;
+    if (VISUAL.offsets[mid] <= target) lo = mid;
+    else hi = mid - 1;
   }
   return lo;
 }
@@ -388,11 +958,16 @@ function scrubToClientX(clientX) {
   const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
   const idx = visualPctToEventIdx(pct);
   STATE.playheadIdx = idx;
+  STATE.playheadPct = pct;          // exact pointer position — no snap to event
   rebuildDocumentTo(idx);
+  clearLiveEdits();
   renderEditor();
   renderPlayhead();
   renderTimeReadout();
   updateUnfocusedOverlay();
+  _activeBurst = null;
+  clearFragmentHighlight();
+  maybeFlashBurst();
 }
 
 /* ---------- timeline tooltip ---------- */
@@ -410,7 +985,10 @@ function timelineHover(clientX) {
   // classify
   let tag = "";
   for (const b of STATE.bursts) {
-    if (idx >= b.start_idx && idx <= b.end_idx) { tag = `<span class="tt-tag burst">Burst</span>`; break; }
+    if (idx >= b.start_idx && idx <= b.end_idx) {
+      tag = `<span class="tt-tag ${kindClass(b.kind)}">${kindLabel(b.kind)}</span>`;
+      break;
+    }
   }
   if (!tag) for (const fi of STATE.focusIntervals) {
     if (idx >= fi.blur_idx && idx < fi.focus_idx) { tag = `<span class="tt-tag unfocused">Unfocused</span>`; break; }
@@ -428,23 +1006,37 @@ function timelineHover(clientX) {
 let _activeBurst = null;
 let _flashTimer = null;
 
+function setBannerKind(banner, kind) {
+  banner.classList.remove("ide-action", "paste");
+  banner.classList.add(kindClass(kind));
+  const txt = $("burst-banner-text");
+  if (txt) txt.textContent = kindLabel(kind);
+}
+
+function setWrapFlashKind(wrap, kind) {
+  wrap.classList.remove("ide-action", "paste");
+  wrap.classList.remove("burst-flash");
+  // restart animation
+  void wrap.offsetWidth;
+  wrap.classList.add("burst-flash", kindClass(kind));
+}
+
 function maybeFlashBurst() {
   for (const burst of STATE.bursts) {
     if (STATE.playheadIdx >= burst.start_idx && STATE.playheadIdx <= burst.end_idx) {
+      const banner = $("burst-banner");
       if (_activeBurst === burst) {
-        $("burst-banner").classList.add("show");
+        banner.classList.add("show");
         return;
       }
       _activeBurst = burst;
       const wrap = $("editor-wrap");
-      wrap.classList.remove("burst-flash");
-      // restart animation
-      void wrap.offsetWidth;
-      wrap.classList.add("burst-flash");
-      $("burst-banner").classList.add("show");
+      setWrapFlashKind(wrap, burst.kind);
+      setBannerKind(banner, burst.kind);
+      banner.classList.add("show");
       if (_flashTimer) clearTimeout(_flashTimer);
       _flashTimer = setTimeout(() => {
-        wrap.classList.remove("burst-flash");
+        wrap.classList.remove("burst-flash", "ide-action", "paste");
       }, 700);
       return;
     }
@@ -466,8 +1058,26 @@ function updateUnfocusedOverlay() {
 
   overlay.hidden = false;
   const blurT = Date.parse(STATE.events[active.blur_idx].timestamp);
-  const nowT = Date.parse(STATE.events[Math.max(0, idx)].timestamp);
-  const elapsedSec = Math.max(0, Math.round((nowT - blurT) / 1000));
+
+  // Interpolate the current playhead time the same way renderTimeReadout()
+  // does, so this elapsed counter advances smoothly through the unfocused
+  // gap (no edits fire while unfocused, so without interpolation the readout
+  // would freeze at the blur event's timestamp = 0:00).
+  let nowT;
+  const ev = STATE.events[Math.max(0, idx)];
+  if (idx >= 0 && idx < STATE.events.length - 1) {
+    const cur = VISUAL.offsets[idx];
+    const next = VISUAL.offsets[idx + 1];
+    const target = (STATE.playheadPct / 100) * VISUAL.total;
+    const frac = next > cur ? Math.max(0, Math.min(1, (target - cur) / (next - cur))) : 0;
+    const t1 = Date.parse(ev.timestamp);
+    const t2 = Date.parse(STATE.events[idx + 1].timestamp);
+    nowT = t1 + (t2 - t1) * frac;
+  } else {
+    nowT = Date.parse(ev.timestamp);
+  }
+
+  const elapsedSec = Math.max(0, Math.floor((nowT - blurT) / 1000));
   const m = Math.floor(elapsedSec / 60);
   const s = elapsedSec % 60;
   elapsedEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
@@ -522,6 +1132,7 @@ renderStatsSidebar();
 renderEditor();
 
 STATE.playheadIdx = -1;
+STATE.playheadPct = 0;
 rebuildDocumentTo(STATE.playheadIdx);
 renderEditor();
 
@@ -534,7 +1145,9 @@ renderTimeReadout();
 $("play-btn").addEventListener("click", () => {
   if (STATE.playheadIdx >= STATE.events.length - 1) {
     STATE.playheadIdx = -1;
+    STATE.playheadPct = 0;
     rebuildDocumentTo(-1);
+    clearLiveEdits();
     renderEditor();
     renderPlayhead();
     renderTimeReadout();
@@ -579,18 +1192,31 @@ $("help-btn").addEventListener("click", () => {
   const track = $("timeline-track");
   const tooltip = $("timeline-tooltip");
   let dragging = false;
+  let pendingX = 0, rafScrub = 0;
+  const flush = () => { rafScrub = 0; scrubToClientX(pendingX); };
 
-  track.addEventListener("mousedown", (e) => {
+  track.addEventListener("pointerdown", (e) => {
     dragging = true;
+    track.setPointerCapture(e.pointerId);
     if (STATE.playing) setPlaying(false);
+    pendingX = e.clientX;
     scrubToClientX(e.clientX);
   });
-  window.addEventListener("mousemove", (e) => {
-    if (dragging) scrubToClientX(e.clientX);
+  track.addEventListener("pointermove", (e) => {
+    if (dragging) {
+      pendingX = e.clientX;
+      if (!rafScrub) rafScrub = requestAnimationFrame(flush);
+    }
+    timelineHover(e.clientX);
   });
-  window.addEventListener("mouseup", () => { dragging = false; });
+  const endDrag = (e) => {
+    dragging = false;
+    if (rafScrub) { cancelAnimationFrame(rafScrub); rafScrub = 0; flush(); }
+    try { track.releasePointerCapture(e.pointerId); } catch {}
+  };
+  track.addEventListener("pointerup", endDrag);
+  track.addEventListener("pointercancel", endDrag);
 
-  track.addEventListener("mousemove", (e) => timelineHover(e.clientX));
   track.addEventListener("mouseleave", () => tooltip.classList.remove("show"));
 })();
 
@@ -603,7 +1229,9 @@ window.addEventListener("keydown", (e) => {
       e.preventDefault();
       if (STATE.playheadIdx >= STATE.events.length - 1) {
         STATE.playheadIdx = -1;
+        STATE.playheadPct = 0;
         rebuildDocumentTo(-1);
+        clearLiveEdits();
         renderEditor();
         renderPlayhead();
         renderTimeReadout();

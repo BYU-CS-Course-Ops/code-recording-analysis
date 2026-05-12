@@ -1,4 +1,5 @@
-from argparse import ArgumentParser
+import webbrowser
+from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
 from recan.formaters import render_json, render_markdown
@@ -7,42 +8,77 @@ from recan.utils import load_recording
 from recan.viewer import write_player_html
 
 
-def main(
-    recording_file: Path,
-    excluded_file_types: list[str],
-    output: Path | None = None,
-    _json: bool = False,
-    view: bool = False,
-) -> None:
+def _load_session(recording_file: Path, excluded_file_types: list[str]):
     inputs = load_recording(recording_file, excluded_file_types)
-    session = analyze_inputs(inputs)
+    return analyze_inputs(inputs)
 
-    text = render_json(session) if _json else render_markdown(session)
-    if output:
-        output.write_text(text, encoding="utf-8")
+
+def cmd_summary(args: Namespace) -> None:
+    session = _load_session(args.recording_file, args.exclude)
+    text = render_json(session) if args.json else render_markdown(session)
+    if args.output:
+        args.output.write_text(text, encoding="utf-8")
+        print(f"Wrote summary to {args.output}")
     else:
         print(text)
 
-    if view:
-        html_path = write_player_html(session, recording_file)
-        print(f"Wrote playback HTML to {html_path}")
+
+def cmd_view(args: Namespace) -> None:
+    session = _load_session(args.recording_file, args.exclude)
+    html_path = write_player_html(session, args.recording_file)
+    print(f"Wrote playback HTML to {html_path}")
+    if args.auto_open:
+        webbrowser.open(html_path.resolve().as_uri())
+
+
+def cmd_stats(args: Namespace) -> None:
+    del args
+    raise NotImplementedError("`recan stats` is a work in progress.")
 
 
 def entry() -> None:
+    # Top-level parser: `recan <command> ...`
     parser = ArgumentParser(description="Analyze IDE recording files.")
-    parser.add_argument("recording_file", type=Path,
-                        help="Path to the recording file (JSONL or gzipped JSONL).")
-    parser.add_argument("--exclude", nargs="*", default=[],
-                        help="List of file extensions to exclude (e.g. .html .md).")
-    parser.add_argument("--output", type=Path,
-                        help="Path to write the analysis results (defaults to stdout).")
-    parser.add_argument("--json", action="store_true",
-                        help="Output the analysis results as JSON instead of human-readable Markdown.")
-    parser.add_argument("--view", action="store_true",
-                        help="Generate a self-contained HTML player next to the recording.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Args shared by every subcommand: the recording path and the exclude filter.
+    def add_common(sp: ArgumentParser) -> None:
+        sp.add_argument("recording_file", type=Path,
+                        help="Path to the recording file (JSONL or gzipped JSONL).")
+        sp.add_argument("--exclude", nargs="*", default=[],
+                        help="List of file extensions to exclude (e.g. .html .md).")
+
+    # `recan summary` — analysis output as Markdown (default) or JSON, to stdout or a file.
+    summary = subparsers.add_parser(
+        "summary", help="Analyze a recording and print or write a JSON/Markdown summary."
+    )
+    add_common(summary)
+    summary.add_argument("--output", type=Path,
+                         help="Path to write the summary (defaults to stdout).")
+    summary.add_argument("--json", action="store_true",
+                         help="Output as JSON instead of human-readable Markdown.")
+    summary.set_defaults(func=cmd_summary)
+
+    # `recan view` — emits a self-contained HTML player and (by default) opens it.
+    view = subparsers.add_parser(
+        "view", help="Generate a self-contained HTML player for a recording."
+    )
+    add_common(view)
+    # Single flag that takes true/false. Defaults to True if --auto-open is omitted.
+    view.add_argument("--auto-open", action="store_true", default=True,
+                      help="Open the generated HTML in the default web browser (default: true).")
+    view.set_defaults(func=cmd_view)
+
+    # `recan stats` — placeholder; the cmd_stats handler raises NotImplementedError.
+    stats = subparsers.add_parser(
+        "stats", help="(WIP) Output summary statistics about a recording."
+    )
+    add_common(stats)
+    stats.set_defaults(func=cmd_stats)
+
+    # Dispatch: each subparser attaches its handler via set_defaults(func=...).
     args = parser.parse_args()
-    main(args.recording_file, args.exclude, args.output, args.json, args.view)
+    args.func(args)
 
 
 if __name__ == "__main__":
