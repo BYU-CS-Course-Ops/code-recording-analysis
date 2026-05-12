@@ -2,22 +2,23 @@
 
 - [ ] Working `analyze_assignment` script. Needs to take the exported submission from Gradescope
 - [ ] Add more metrics? E.g. "time spent writing code" "total deleted chars"
-- [ ] Set up CICD for `recan`
+- [x] Set up CICD for `recan`
 - [ ] Add a `--metadata` CLI flag that takes a string and renders it at the top of the playback view (e.g. `recan ... --metadata "Gordon Bean, CS 110 Final"`)
 - [ ] Better markdown template for the autograder view of the timeline
 - [ ] Add a bit more guidance to the README
-- [ ] Notify in the code-recorder CICD Discord channel (reuse the plugins channel) on new builds
+- [x] Notify in the code-recorder CICD Discord channel (reuse the plugins channel) on new builds
+- [x] Organize the flags on the side bar of the playback view. E.g. group "IDE actions" together, "copy-paste" together, etc.
 
 # Investigate
 
-- [ ] Improve heuristics? How to better label data as IDE-actions/burst/copy paste/unfocused time?
+- [x] Improve heuristics? How to better label data as IDE-actions/burst/copy paste/unfocused time?
 - [ ] See how VSCode's recordings render E.g. IDE actions, copy-pastes, etc.
 - [ ] Heuristic for detecting toggle-comment and block indent/unindent (highlight text + Tab, Shift+Tab)
-- [ ] Reproduce the cyclical import error (currently can't recreate)
 
 # Bugs
 
-- [ ] Unfocused timer does not increment in the playback view
+- [x] Unfocused timer does not increment in the playback view
+- [ ] Persist settings when closing and reopening the html
 
 # Feature Requests
 

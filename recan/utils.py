@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from .structure import CREATE_FUNCTION_PATTERN, MAIN_BLOCK_PATTERN
+
 
 GENERATED_MIN_CHARS_SINGLE_LINE = 20
 
@@ -62,6 +64,13 @@ def is_generated_edit(event: dict) -> bool:
         return True
     return len(fragment) >= GENERATED_MIN_CHARS_SINGLE_LINE
 
+
+def is_ide_action(fragment: str) -> bool:
+    """Heuristic for this edit looks like an IDE auto-completion or refactor."""
+    return bool(
+        CREATE_FUNCTION_PATTERN.search(fragment) or
+        MAIN_BLOCK_PATTERN.search(fragment)
+    )
 
 def apply_edit(document: str, offset: int, old_fragment: str, new_fragment: str) -> str:
     """Apply a single edit to the in-memory document string."""

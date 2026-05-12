@@ -1,6 +1,24 @@
+import re
 from datetime import datetime
 from typing import Literal, TypedDict
 
+# Matches an IDE-completed function stub, e.g.:
+#   def foo():\n    pass
+#   def foo(a, b):\n    pass
+#   def foo(a: int) -> str:\n    pass
+#   def foo():\n        (cursor sits on indented empty line)
+CREATE_FUNCTION_PATTERN = re.compile(
+    r'^[ \t]*def\s+\w+\s*\([^)]*\)\s*(?:->\s*[^:]+?)?\s*:[ \t]*\n[ \t]+(?:pass\b|\.\.\.|$)',
+    re.MULTILINE,
+)
+
+# Matches the IDE-completed main guard, e.g.:
+#   if __name__ == "__main__":\n
+#   if __name__ == '__main__':\n        main()
+MAIN_BLOCK_PATTERN = re.compile(
+    r'^[ \t]*if\s+__name__\s*==\s*[\'"]__main__[\'"]\s*:[ \t]*\n[ \t]+',
+    re.MULTILINE,
+)
 
 class Input(TypedDict):
     type: Literal['focusStatus', 'edit']
