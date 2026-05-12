@@ -12,6 +12,7 @@ from recan.utils import (
     apply_edit,
     event_kind,
     is_generated_edit,
+    is_ide_action,
     language_from_extension,
     parse_ts,
 )
@@ -148,15 +149,32 @@ def analyze_inputs(inputs: list[dict]) -> Session:
     def flush_group():
         if not group:
             return
-        kind_label = "ide_action" if len(group) > 1 else "paste"
-        kept = group[-1]
+        matches = [e for e in group if is_ide_action(e["fragment"])]
+
+        # TODO: Revisit checking the length of the matches list. True paste/AI events can be false positives for the
+        #  is_ide_action heuristic. However, the `MAIN_BLOCK_Pattern` is false negative since pycharm does this action
+        #  one fragment while the `CREATE_FUNCTION_PATTERN` takes 5 fragments. However, if a false positive is present
+        #  it did nothing more then what the IDE would have done for this snippet
+
+        if matches:
+            kept = max(matches, key=lambda e: e["char_count"])
+            kind_label = "ide_action"
+            line_count = kept["line_count"]
+            char_count = kept["char_count"]
+
+        else:
+            kept = max(group, key=lambda e: e["char_count"])
+            kind_label = "paste"
+            line_count = sum(e["line_count"] for e in group)
+            char_count = sum(e["char_count"] for e in group)
+
         bursts.append({
             "kind": kind_label,
-            "timestamp": kept["timestamp"],
+            "timestamp": group[-1]["timestamp"],
             "start_idx": group[0]["event_idx"],
-            "end_idx": kept["event_idx"],
-            "line_count": sum(e["line_count"] for e in group),
-            "char_count": sum(e["char_count"] for e in group),
+            "end_idx": group[-1]["event_idx"],
+            "line_count": line_count,
+            "char_count": char_count,
             "fragment": kept["fragment"],
         })
         group.clear()

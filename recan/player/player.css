@@ -24,10 +24,16 @@
   --unfocused:    #D97706;   /* amber — distracted, notable */
   --unfocused-soft:#FCE6BD;
 
-  --burst:        #DC2626;   /* red — burst, worth investigating */
+  --burst:        #DC2626;   /* red — paste, worth investigating */
   --burst-soft:   #FBD9D6;
+  --burst-rgb:    220, 38, 38;
+
+  --ide-action:       #7C3AED;   /* purple — IDE-generated action (auto-complete, template) */
+  --ide-action-soft:  #EDE4FE;
+  --ide-action-rgb:   124, 58, 237;
 
   --ok:           #16A34A;
+  --ok-rgb:       22, 163, 74;
 
   --shadow-sm: 0 1px 1px rgba(20, 18, 10, 0.04), 0 1px 2px rgba(20, 18, 10, 0.04);
   --shadow-md: 0 2px 4px rgba(20, 18, 10, 0.06), 0 4px 12px rgba(20, 18, 10, 0.05);
@@ -69,8 +75,14 @@
 
   --burst:        #F87171;
   --burst-soft:   #3C1B1B;
+  --burst-rgb:    248, 113, 113;
+
+  --ide-action:       #A78BFA;
+  --ide-action-soft:  #2B1B4D;
+  --ide-action-rgb:   167, 139, 250;
 
   --ok:           #34D399;
+  --ok-rgb:       52, 211, 153;
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
@@ -105,12 +117,12 @@ button { font: inherit; color: inherit; }
 /* ===================== Layout ===================== */
 .app {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 280px 1fr;
   grid-template-rows: auto 1fr auto;
   grid-template-areas:
-    "topbar  topbar"
-    "editor  sidebar"
-    "timeline sidebar";
+    "topbar    topbar"
+    "sidebar   editor"
+    "sidebar   timeline";
   height: 100vh;
   min-height: 0;
 }
@@ -266,9 +278,11 @@ button { font: inherit; color: inherit; }
   border-radius: 3px;
   flex-shrink: 0;
 }
-.es-chip.burst .swatch     { background: var(--burst); }
-.es-chip.unfocused .swatch { background: var(--unfocused); }
-.es-chip.idle .swatch      { background: var(--idle); }
+.es-chip.burst .swatch       { background: var(--burst); }
+.es-chip.paste .swatch       { background: var(--burst); }
+.es-chip.ide-action .swatch  { background: var(--ide-action); }
+.es-chip.unfocused .swatch   { background: var(--unfocused); }
+.es-chip.idle .swatch        { background: var(--idle); }
 
 .es-progress {
   margin-left: auto;
@@ -288,11 +302,14 @@ button { font: inherit; color: inherit; }
   overflow: auto;
   white-space: pre;
   position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
 }
 
 .editor code {
   background: transparent !important;
-  padding: 16px 16px 16px 0 !important;
+  padding: 16px 16px 16px 16px !important;
   display: block;
   color: var(--hl-fg);
   counter-reset: line;
@@ -315,11 +332,16 @@ button { font: inherit; color: inherit; }
   user-select: none;
   font-variant-numeric: tabular-nums;
   white-space: pre;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.55;
+  position: sticky;
+  left: 0;
+  align-self: stretch;
+  min-width: 3ch;
+  z-index: 2;
 }
 
-/* burst flash — analytic red wash */
+/* event flash — analytic wash, color depends on event kind */
 .editor-wrap.burst-flash::before {
   content: "";
   position: absolute;
@@ -329,6 +351,8 @@ button { font: inherit; color: inherit; }
   opacity: 0.45;
   animation: burstWash 600ms ease-out;
 }
+.editor-wrap.burst-flash.ide-action::before { background: var(--ide-action-soft); }
+.editor-wrap.burst-flash.paste::before      { background: var(--burst-soft); }
 
 @keyframes burstWash {
   from { opacity: 0.7; }
@@ -351,9 +375,12 @@ button { font: inherit; color: inherit; }
   display: none;
   align-items: center;
   gap: 6px;
+  --pulse-rgb: var(--burst-rgb);
   animation: pulseDot 1.2s ease-in-out infinite;
 }
 .burst-banner.show { display: inline-flex; }
+.burst-banner.paste      { background: var(--burst);      --pulse-rgb: var(--burst-rgb); }
+.burst-banner.ide-action { background: var(--ide-action); --pulse-rgb: var(--ide-action-rgb); }
 
 .burst-banner::before {
   content: "";
@@ -364,8 +391,8 @@ button { font: inherit; color: inherit; }
 }
 
 @keyframes pulseDot {
-  0%,100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4), var(--shadow-md); }
-  50%     { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0), var(--shadow-md); }
+  0%,100% { box-shadow: 0 0 0 0 rgba(var(--pulse-rgb), 0.4), var(--shadow-md); }
+  50%     { box-shadow: 0 0 0 8px rgba(var(--pulse-rgb), 0), var(--shadow-md); }
 }
 
 /* unfocused overlay */
@@ -489,6 +516,14 @@ button { font: inherit; color: inherit; }
   border-radius: 1px;
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--burst) 25%, transparent);
 }
+.tick-burst.ide-action {
+  background: var(--ide-action);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ide-action) 25%, transparent);
+}
+.tick-burst.paste {
+  background: var(--burst);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--burst) 25%, transparent);
+}
 
 .playhead {
   position: absolute;
@@ -552,9 +587,11 @@ button { font: inherit; color: inherit; }
   letter-spacing: 0.06em;
   font-weight: 700;
 }
-.timeline-tooltip .tt-tag.burst     { background: var(--burst);     color: #fff; }
-.timeline-tooltip .tt-tag.unfocused { background: var(--unfocused); color: #fff; }
-.timeline-tooltip .tt-tag.idle      { background: var(--idle);      color: #fff; }
+.timeline-tooltip .tt-tag.burst      { background: var(--burst);      color: #fff; }
+.timeline-tooltip .tt-tag.paste      { background: var(--burst);      color: #fff; }
+.timeline-tooltip .tt-tag.ide-action { background: var(--ide-action); color: #fff; }
+.timeline-tooltip .tt-tag.unfocused  { background: var(--unfocused);  color: #fff; }
+.timeline-tooltip .tt-tag.idle       { background: var(--idle);       color: #fff; }
 
 .timeline-legend {
   display: flex;
@@ -593,6 +630,18 @@ button { font: inherit; color: inherit; }
   width: 3px;
   height: 14px;
   background: var(--burst);
+  border-radius: 1px;
+}
+.legend-swatch.paste {
+  width: 3px;
+  height: 14px;
+  background: var(--burst);
+  border-radius: 1px;
+}
+.legend-swatch.ide-action {
+  width: 3px;
+  height: 14px;
+  background: var(--ide-action);
   border-radius: 1px;
 }
 
@@ -664,8 +713,10 @@ button { font: inherit; color: inherit; }
 }
 .transport-btn svg { width: 13px; height: 13px; }
 .transport-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
-.transport-btn.burst:hover    { color: var(--burst);     border-color: var(--burst); }
-.transport-btn.unfocused:hover{ color: var(--unfocused); border-color: var(--unfocused); }
+.transport-btn.burst:hover      { color: var(--burst);      border-color: var(--burst); }
+.transport-btn.paste:hover      { color: var(--burst);      border-color: var(--burst); }
+.transport-btn.ide-action:hover { color: var(--ide-action); border-color: var(--ide-action); }
+.transport-btn.unfocused:hover  { color: var(--unfocused);  border-color: var(--unfocused); }
 
 .speed {
   background: var(--panel);
@@ -722,7 +773,7 @@ button { font: inherit; color: inherit; }
 /* ===================== Sidebar ===================== */
 .stats {
   background: var(--panel);
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -787,7 +838,77 @@ button { font: inherit; color: inherit; }
 }
 
 /* flag callouts */
-.flags { display: flex; flex-direction: column; gap: 6px; }
+.flags { display: flex; flex-direction: column; gap: 8px; }
+
+/* collapsible flag groups */
+.flag-group {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.flag-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  user-select: none;
+  list-style: none;
+}
+.flag-group > summary::-webkit-details-marker { display: none; }
+.flag-group > summary:hover { background: var(--panel-2); }
+.flag-group .fg-chev {
+  transition: transform 150ms ease;
+  color: var(--fg-subtle);
+  font-size: 10px;
+}
+.flag-group[open] .fg-chev { transform: rotate(90deg); }
+.flag-group .fg-label { flex: 1; }
+.flag-group .fg-count {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.flag-group.ide-action > summary { color: var(--ide-action); }
+.flag-group.ide-action .fg-count {
+  background: var(--ide-action-soft);
+  border-color: color-mix(in oklab, var(--ide-action) 30%, transparent);
+  color: var(--ide-action);
+}
+.flag-group.paste > summary { color: var(--burst); }
+.flag-group.paste .fg-count {
+  background: var(--burst-soft);
+  border-color: color-mix(in oklab, var(--burst) 30%, transparent);
+  color: var(--burst);
+}
+.flag-group.unfocused > summary { color: var(--unfocused); }
+.flag-group.unfocused .fg-count {
+  background: var(--unfocused-soft);
+  border-color: color-mix(in oklab, var(--unfocused) 30%, transparent);
+  color: var(--unfocused);
+}
+.flag-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 6px 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.flag-group .flag {
+  background: var(--panel);
+}
 
 .flag {
   display: flex;
@@ -806,6 +927,8 @@ button { font: inherit; color: inherit; }
 }
 .flag:hover { background: var(--panel-2); }
 .flag.burst      { border-left-color: var(--burst); }
+.flag.paste      { border-left-color: var(--burst); }
+.flag.ide-action { border-left-color: var(--ide-action); }
 .flag.unfocused  { border-left-color: var(--unfocused); }
 .flag.ok         { border-left-color: var(--ok); }
 
@@ -820,8 +943,10 @@ button { font: inherit; color: inherit; }
   font-weight: 700;
   margin-top: 1px;
 }
-.flag.burst      .flag-icon { background: var(--burst-soft);     color: var(--burst); }
-.flag.unfocused  .flag-icon { background: var(--unfocused-soft); color: var(--unfocused); }
+.flag.burst      .flag-icon { background: var(--burst-soft);      color: var(--burst); }
+.flag.paste      .flag-icon { background: var(--burst-soft);      color: var(--burst); }
+.flag.ide-action .flag-icon { background: var(--ide-action-soft); color: var(--ide-action); }
+.flag.unfocused  .flag-icon { background: var(--unfocused-soft);  color: var(--unfocused); }
 .flag.ok         .flag-icon { background: color-mix(in oklab, var(--ok) 15%, transparent); color: var(--ok); }
 
 .flag-body { flex: 1; min-width: 0; }
@@ -849,6 +974,52 @@ button { font: inherit; color: inherit; }
 }
 
 /* ===================== Misc ===================== */
+
+/* Fragment highlight — applied when a key-moment flag is clicked, cleared on
+   the next scrub. Uses the CSS Highlights API so we don't have to mangle
+   highlight.js's DOM. */
+::highlight(burst-fragment-ide) {
+  background-color: rgba(var(--ide-action-rgb), 0.18);
+  text-decoration: underline 2px var(--ide-action);
+  text-underline-offset: 3px;
+}
+::highlight(burst-fragment-paste) {
+  background-color: rgba(var(--burst-rgb), 0.18);
+  text-decoration: underline 2px var(--burst);
+  text-underline-offset: 3px;
+}
+
+/* Live edit highlight — paints a colored rectangle over each fragment as it
+   appears during playback, then fades over ~1s. Uses a sibling overlay rather
+   than the CSS Highlights API so individual rects can fade independently and
+   coexist with the click-driven burst highlights above. */
+.edit-highlight-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.eh-rect {
+  position: absolute;
+  border-radius: 2px;
+  will-change: opacity;
+}
+.eh-rect.eh-edit {
+  background: rgba(var(--ok-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 0 var(--ok);
+}
+.eh-rect.eh-paste {
+  background: rgba(var(--burst-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 0 var(--burst);
+}
+.eh-rect.eh-ide-action {
+  background: rgba(var(--ide-action-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 0 var(--ide-action);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
@@ -867,7 +1038,7 @@ button { font: inherit; color: inherit; }
       "sidebar";
   }
   .stats {
-    border-left: 0;
+    border-right: 0;
     border-top: 1px solid var(--border);
     max-height: 220px;
   }
