@@ -33,6 +33,9 @@ class DocumentMatcher:
         from pydivsufsort import divsufsort
         self._sa = divsufsort(self._history_bytes)
 
+    def resolve(self) -> list[bool]:
+        return [self._contains(frag, before_pos) for frag, before_pos in self._pending_checks]
+
     def _contains(self, fragment: str, before_pos: int) -> bool:
         from pydivsufsort import sa_search
         if not fragment:
