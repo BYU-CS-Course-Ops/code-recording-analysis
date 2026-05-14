@@ -28,3 +28,19 @@ class DocumentMatcher:
         end = offset + len(old_fragment)
         self._current = self._current[:offset] + new_fragment + self._current[end:]
         self._history_bytes += self._current.encode("utf-8") + self.SENTINEL
+
+    def finalize(self) -> None:
+        from pydivsufsort import divsufsort
+        self._sa = divsufsort(self._history_bytes)
+
+    def _contains(self, fragment: str, before_pos: int) -> bool:
+        from pydivsufsort import sa_search
+        if not fragment:
+            return False
+        fb = fragment.encode("utf-8")
+        count, sa_pos = sa_search(self._history_bytes, self._sa, fb)
+        if count == 0:
+            return False
+        positions = self._sa[sa_pos : sa_pos + count]
+        flen = len(fb)
+        return any(int(p) + flen <= before_pos for p in positions)
