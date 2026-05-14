@@ -50,7 +50,7 @@ class IdleGap(TypedDict):
 
 
 class Burst(TypedDict):
-    kind: Literal['paste', 'ide_action']
+    kind: Literal['approved paste', 'unapproved paste', 'internal paste', 'ide_action']
     timestamp: datetime
     start_idx: int
     end_idx: int
@@ -65,7 +65,7 @@ class Snapshot(TypedDict):
 
 
 class TimelineEntry(TypedDict, total=False):
-    # kind ∈ {"focus", "paste", "ide_action"}
+    # kind ∈ {"focus", "approved paste", "unapproved paste", "internal paste", "ide_action"}
     kind: str
     timestamp: datetime
     duration: float
@@ -85,6 +85,7 @@ class Session(TypedDict):
     total_edits: int
     total_unapproved_pastes: int
     total_approved_pastes: int
+    total_internal_pastes: int
     total_ide_actions: int
     total_generated_events: int
 
