@@ -83,7 +83,8 @@ class Session(TypedDict):
     total_time_unfocused: float
 
     total_edits: int
-    total_pastes: int
+    total_unapproved_pastes: int
+    total_approved_pastes: int
     total_ide_actions: int
     total_generated_events: int
 

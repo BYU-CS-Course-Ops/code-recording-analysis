@@ -24,9 +24,19 @@
   --unfocused:    #D97706;   /* amber — distracted, notable */
   --unfocused-soft:#FCE6BD;
 
-  --burst:        #DC2626;   /* red — paste, worth investigating */
+  --burst:        #DC2626;   /* red — unapproved paste, worth investigating */
   --burst-soft:   #FBD9D6;
   --burst-rgb:    220, 38, 38;
+
+  /* approved paste — green (sanctioned snippet, e.g. starter code) */
+  --approved:        #16A34A;
+  --approved-soft:   #DCFCE7;
+  --approved-rgb:    22, 163, 74;
+
+  /* unapproved paste — alias of --burst for clarity at call sites */
+  --unapproved:        var(--burst);
+  --unapproved-soft:   var(--burst-soft);
+  --unapproved-rgb:    var(--burst-rgb);
 
   --ide-action:       #7C3AED;   /* purple — IDE-generated action (auto-complete, template) */
   --ide-action-soft:  #EDE4FE;
@@ -76,6 +86,14 @@
   --burst:        #F87171;
   --burst-soft:   #3C1B1B;
   --burst-rgb:    248, 113, 113;
+
+  --approved:        #34D399;
+  --approved-soft:   #16321F;
+  --approved-rgb:    52, 211, 153;
+
+  --unapproved:        var(--burst);
+  --unapproved-soft:   var(--burst-soft);
+  --unapproved-rgb:    var(--burst-rgb);
 
   --ide-action:       #A78BFA;
   --ide-action-soft:  #2B1B4D;
@@ -279,7 +297,8 @@ button { font: inherit; color: inherit; }
   flex-shrink: 0;
 }
 .es-chip.burst .swatch       { background: var(--burst); }
-.es-chip.paste .swatch       { background: var(--burst); }
+.es-chip.approved-paste .swatch   { background: var(--approved); }
+.es-chip.unapproved-paste .swatch { background: var(--unapproved); }
 .es-chip.ide-action .swatch  { background: var(--ide-action); }
 .es-chip.unfocused .swatch   { background: var(--unfocused); }
 .es-chip.idle .swatch        { background: var(--idle); }
@@ -351,8 +370,9 @@ button { font: inherit; color: inherit; }
   opacity: 0.45;
   animation: burstWash 600ms ease-out;
 }
-.editor-wrap.burst-flash.ide-action::before { background: var(--ide-action-soft); }
-.editor-wrap.burst-flash.paste::before      { background: var(--burst-soft); }
+.editor-wrap.burst-flash.ide-action::before     { background: var(--ide-action-soft); }
+.editor-wrap.burst-flash.approved-paste::before { background: var(--approved-soft); }
+.editor-wrap.burst-flash.unapproved-paste::before { background: var(--unapproved-soft); }
 
 @keyframes burstWash {
   from { opacity: 0.7; }
@@ -379,8 +399,9 @@ button { font: inherit; color: inherit; }
   animation: pulseDot 1.2s ease-in-out infinite;
 }
 .burst-banner.show { display: inline-flex; }
-.burst-banner.paste      { background: var(--burst);      --pulse-rgb: var(--burst-rgb); }
-.burst-banner.ide-action { background: var(--ide-action); --pulse-rgb: var(--ide-action-rgb); }
+.burst-banner.approved-paste   { background: var(--approved);   --pulse-rgb: var(--approved-rgb); }
+.burst-banner.unapproved-paste { background: var(--unapproved); --pulse-rgb: var(--unapproved-rgb); }
+.burst-banner.ide-action       { background: var(--ide-action); --pulse-rgb: var(--ide-action-rgb); }
 
 .burst-banner::before {
   content: "";
@@ -520,9 +541,13 @@ button { font: inherit; color: inherit; }
   background: var(--ide-action);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--ide-action) 25%, transparent);
 }
-.tick-burst.paste {
-  background: var(--burst);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--burst) 25%, transparent);
+.tick-burst.approved-paste {
+  background: var(--approved);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--approved) 25%, transparent);
+}
+.tick-burst.unapproved-paste {
+  background: var(--unapproved);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--unapproved) 25%, transparent);
 }
 
 .playhead {
@@ -588,7 +613,8 @@ button { font: inherit; color: inherit; }
   font-weight: 700;
 }
 .timeline-tooltip .tt-tag.burst      { background: var(--burst);      color: #fff; }
-.timeline-tooltip .tt-tag.paste      { background: var(--burst);      color: #fff; }
+.timeline-tooltip .tt-tag.approved-paste   { background: var(--approved);   color: #fff; }
+.timeline-tooltip .tt-tag.unapproved-paste { background: var(--unapproved); color: #fff; }
 .timeline-tooltip .tt-tag.ide-action { background: var(--ide-action); color: #fff; }
 .timeline-tooltip .tt-tag.unfocused  { background: var(--unfocused);  color: #fff; }
 .timeline-tooltip .tt-tag.idle       { background: var(--idle);       color: #fff; }
@@ -632,10 +658,16 @@ button { font: inherit; color: inherit; }
   background: var(--burst);
   border-radius: 1px;
 }
-.legend-swatch.paste {
+.legend-swatch.approved-paste {
   width: 3px;
   height: 14px;
-  background: var(--burst);
+  background: var(--approved);
+  border-radius: 1px;
+}
+.legend-swatch.unapproved-paste {
+  width: 3px;
+  height: 14px;
+  background: var(--unapproved);
   border-radius: 1px;
 }
 .legend-swatch.ide-action {
@@ -713,9 +745,10 @@ button { font: inherit; color: inherit; }
 }
 .transport-btn svg { width: 13px; height: 13px; }
 .transport-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
-.transport-btn.burst:hover      { color: var(--burst);      border-color: var(--burst); }
-.transport-btn.paste:hover      { color: var(--burst);      border-color: var(--burst); }
-.transport-btn.ide-action:hover { color: var(--ide-action); border-color: var(--ide-action); }
+.transport-btn.burst:hover           { color: var(--burst);      border-color: var(--burst); }
+.transport-btn.approved-paste:hover   { color: var(--approved);   border-color: var(--approved); }
+.transport-btn.unapproved-paste:hover { color: var(--unapproved); border-color: var(--unapproved); }
+.transport-btn.ide-action:hover       { color: var(--ide-action); border-color: var(--ide-action); }
 .transport-btn.unfocused:hover  { color: var(--unfocused);  border-color: var(--unfocused); }
 
 .speed {
@@ -886,11 +919,17 @@ button { font: inherit; color: inherit; }
   border-color: color-mix(in oklab, var(--ide-action) 30%, transparent);
   color: var(--ide-action);
 }
-.flag-group.paste > summary { color: var(--burst); }
-.flag-group.paste .fg-count {
-  background: var(--burst-soft);
-  border-color: color-mix(in oklab, var(--burst) 30%, transparent);
-  color: var(--burst);
+.flag-group.approved-paste > summary { color: var(--approved); }
+.flag-group.approved-paste .fg-count {
+  background: var(--approved-soft);
+  border-color: color-mix(in oklab, var(--approved) 30%, transparent);
+  color: var(--approved);
+}
+.flag-group.unapproved-paste > summary { color: var(--unapproved); }
+.flag-group.unapproved-paste .fg-count {
+  background: var(--unapproved-soft);
+  border-color: color-mix(in oklab, var(--unapproved) 30%, transparent);
+  color: var(--unapproved);
 }
 .flag-group.unfocused > summary { color: var(--unfocused); }
 .flag-group.unfocused .fg-count {
@@ -927,7 +966,8 @@ button { font: inherit; color: inherit; }
 }
 .flag:hover { background: var(--panel-2); }
 .flag.burst      { border-left-color: var(--burst); }
-.flag.paste      { border-left-color: var(--burst); }
+.flag.approved-paste   { border-left-color: var(--approved); }
+.flag.unapproved-paste { border-left-color: var(--unapproved); }
 .flag.ide-action { border-left-color: var(--ide-action); }
 .flag.unfocused  { border-left-color: var(--unfocused); }
 .flag.ok         { border-left-color: var(--ok); }
@@ -944,7 +984,8 @@ button { font: inherit; color: inherit; }
   margin-top: 1px;
 }
 .flag.burst      .flag-icon { background: var(--burst-soft);      color: var(--burst); }
-.flag.paste      .flag-icon { background: var(--burst-soft);      color: var(--burst); }
+.flag.approved-paste   .flag-icon { background: var(--approved-soft);   color: var(--approved); }
+.flag.unapproved-paste .flag-icon { background: var(--unapproved-soft); color: var(--unapproved); }
 .flag.ide-action .flag-icon { background: var(--ide-action-soft); color: var(--ide-action); }
 .flag.unfocused  .flag-icon { background: var(--unfocused-soft);  color: var(--unfocused); }
 .flag.ok         .flag-icon { background: color-mix(in oklab, var(--ok) 15%, transparent); color: var(--ok); }
@@ -983,9 +1024,14 @@ button { font: inherit; color: inherit; }
   text-decoration: underline 2px var(--ide-action);
   text-underline-offset: 3px;
 }
-::highlight(burst-fragment-paste) {
-  background-color: rgba(var(--burst-rgb), 0.18);
-  text-decoration: underline 2px var(--burst);
+::highlight(burst-fragment-approved-paste) {
+  background-color: rgba(var(--approved-rgb), 0.18);
+  text-decoration: underline 2px var(--approved);
+  text-underline-offset: 3px;
+}
+::highlight(burst-fragment-unapproved-paste) {
+  background-color: rgba(var(--unapproved-rgb), 0.18);
+  text-decoration: underline 2px var(--unapproved);
   text-underline-offset: 3px;
 }
 
@@ -1011,9 +1057,13 @@ button { font: inherit; color: inherit; }
   background: rgba(var(--ok-rgb), 0.18);
   box-shadow: inset 0 -2px 0 0 var(--ok);
 }
-.eh-rect.eh-paste {
-  background: rgba(var(--burst-rgb), 0.18);
-  box-shadow: inset 0 -2px 0 0 var(--burst);
+.eh-rect.eh-approved-paste {
+  background: rgba(var(--approved-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 0 var(--approved);
+}
+.eh-rect.eh-unapproved-paste {
+  background: rgba(var(--unapproved-rgb), 0.18);
+  box-shadow: inset 0 -2px 0 0 var(--unapproved);
 }
 .eh-rect.eh-ide-action {
   background: rgba(var(--ide-action-rgb), 0.18);

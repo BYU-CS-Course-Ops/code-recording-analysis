@@ -21,7 +21,7 @@
 {% if entry.kind == "focus" -%}
 - **{{ format_ts(entry.timestamp) }}** — Lost focus for {{ format_duration(entry.duration) }}
 {% else -%}
-- **{{ format_ts(entry.timestamp) }}** — {{ "IDE Action" if entry.kind == "ide_action" else "Paste" }} ({{ entry.line_count }} lines, {{ entry.char_count }} chars)
+- **{{ format_ts(entry.timestamp) }}** — {{ entry.kind }} ({{ entry.line_count }} lines, {{ entry.char_count }} chars)
 
   ```{{ session.language }}
   {{ entry.fragment | indent(2) }}

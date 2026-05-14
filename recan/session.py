@@ -6,7 +6,7 @@ from recan.structure import (
     IdleGap,
     Session,
     Snapshot,
-    TimelineEntry,
+    TimelineEntry
 )
 from recan.utils import (
     apply_edit,
@@ -17,13 +17,12 @@ from recan.utils import (
     parse_ts,
 )
 
-
 BURST_GROUP_WINDOW_MS = 100
 IDLE_GAP_THRESHOLD_SECONDS = 5.0
 SNAPSHOT_INTERVAL_EVENTS = 200
 
 
-def analyze_inputs(inputs: list[dict]) -> Session:
+def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> Session:
     """Walk the (already filtered) event stream once and produce a Session.
 
     Single source of truth for both the markdown summary and the HTML player.
@@ -149,34 +148,39 @@ def analyze_inputs(inputs: list[dict]) -> Session:
     def flush_group():
         if not group:
             return
-        matches = [e for e in group if is_ide_action(e["fragment"])]
 
-        # TODO: Revisit checking the length of the matches list. True paste/AI events can be false positives for the
-        #  is_ide_action heuristic. However, the `MAIN_BLOCK_Pattern` is false negative since pycharm does this action
-        #  one fragment while the `CREATE_FUNCTION_PATTERN` takes 5 fragments. However, if a false positive is present
-        #  it did nothing more then what the IDE would have done for this snippet
+        """
+        IDE-Action Heuristic: 
+        
+            - `create function` — Since pycharm generates multiple fragments when executing this action as long as one 
+              of them matches the CREATE_FUNCTION_PATTERN, we label the whole burst as an ide_action
+              
+            - `main block` — Similarly, since pycharm generates multiple fragments when executing this action as long 
+              as one of them matches the MAIN_BLOCK_PATTERN, we label the whole burst as an ide_action
+        """
 
-        if matches:
-            kept = max(matches, key=lambda e: e["char_count"])
+        if is_ide_action(group):
+            kept = max(group, key=lambda e: e["char_count"])
             kind_label = "ide_action"
             line_count = kept["line_count"]
             char_count = kept["char_count"]
 
         else:
             kept = max(group, key=lambda e: e["char_count"])
-            kind_label = "paste"
+            kind_label = "approved paste" if any(
+                e["fragment"] in approved_fragments for e in group) else "unapproved paste"
             line_count = sum(e["line_count"] for e in group)
             char_count = sum(e["char_count"] for e in group)
 
-        bursts.append({
-            "kind": kind_label,
-            "timestamp": group[-1]["timestamp"],
-            "start_idx": group[0]["event_idx"],
-            "end_idx": group[-1]["event_idx"],
-            "line_count": line_count,
-            "char_count": char_count,
-            "fragment": kept["fragment"],
-        })
+        bursts.append(Burst(
+            kind=kind_label,
+            timestamp=kept["timestamp"],
+            start_idx=group[0]["event_idx"],
+            end_idx=group[-1]["event_idx"],
+            line_count=line_count,
+            char_count=char_count,
+            fragment=kept["fragment"],
+        ))
         group.clear()
 
     for entry in generated_entries:
@@ -202,7 +206,8 @@ def analyze_inputs(inputs: list[dict]) -> Session:
 
     total_time = (end_time - start_time).total_seconds() if start_time and end_time else 0.0
     total_ide_actions = sum(1 for b in bursts if b["kind"] == "ide_action")
-    total_pastes = sum(1 for b in bursts if b["kind"] == "paste")
+    total_unapproved_pastes = sum(1 for b in bursts if b["kind"] == "unapproved paste")
+    total_approved_pastes = sum(1 for b in bursts if b["kind"] == "approved paste")
 
     return {
         "document": document_name,
@@ -212,9 +217,10 @@ def analyze_inputs(inputs: list[dict]) -> Session:
         "total_time": total_time,
         "total_time_unfocused": total_time_unfocused,
         "total_edits": edit_count,
-        "total_pastes": total_pastes,
+        "total_unapproved_pastes": total_unapproved_pastes,
+        "total_approved_pastes": total_approved_pastes,
         "total_ide_actions": total_ide_actions,
-        "total_generated_events": total_ide_actions + total_pastes,
+        "total_generated_events": total_ide_actions + total_unapproved_pastes + total_approved_pastes,
         "events": events,
         "focus_intervals": focus_intervals,
         "idle_gaps": idle_gaps,
