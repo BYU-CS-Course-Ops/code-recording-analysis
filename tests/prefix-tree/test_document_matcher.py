@@ -53,3 +53,44 @@ def test_contains_finds_intermediate_state_clean():
     assert m.document == "def main"
     m.finalize()
     assert m._contains("def man", before_pos=len(m._history_bytes)) is True
+
+
+def test_sentinel_prevents_matches_spanning_snapshots():
+    """Without the NUL sentinel, "abc\\x00xyz" could match "cx".
+    With the sentinel, no match must span the join."""
+    m = DocumentMatcher()
+    m.apply_edit(0, "", "abc", is_generated=False)
+    m.apply_edit(0, "abc", "xyz", is_generated=False)
+    m.finalize()
+    assert m._contains("cx", before_pos=len(m._history_bytes)) is False
+
+
+def test_before_pos_prevents_self_match():
+    """A generated edit must not match its own freshly-appended snapshot."""
+    m = DocumentMatcher()
+    m.apply_edit(0, "", "totally_new_fragment_xyz", is_generated=True)
+    m.finalize()
+    flags = m.resolve()
+    assert flags == [False]
+
+
+def test_before_pos_allows_match_against_prior_history():
+    """A generated edit IS allowed to match anything strictly before its
+    own snapshot."""
+    m = DocumentMatcher()
+    m.apply_edit(0, "", "def helper():\n    return 1\n", is_generated=False)
+    m.apply_edit(0, "def helper():\n    return 1\n", "", is_generated=False)
+    m.apply_edit(0, "", "def helper():\n    return 1\n", is_generated=True)
+    m.finalize()
+    flags = m.resolve()
+    assert flags == [True]
+
+
+def test_resolve_returns_list_in_order():
+    m = DocumentMatcher()
+    m.apply_edit(0, "", "alpha\n", is_generated=False)
+    m.apply_edit(0, "", "beta\n", is_generated=True)
+    m.apply_edit(0, "", "alpha\n", is_generated=True)
+    m.finalize()
+    flags = m.resolve()
+    assert flags == [False, True]
