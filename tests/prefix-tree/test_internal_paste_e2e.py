@@ -87,3 +87,45 @@ def test_internal_paste_matches_transient_state_not_in_final_doc():
     assert len(paste_bursts) == 1
     assert paste_bursts[0]["kind"] == "internal paste"
     assert session["total_internal_pastes"] == 1
+
+
+def test_approved_paste_beats_internal():
+    """A fragment that's BOTH internal AND approved is labeled approved."""
+    base = datetime(2026, 5, 14, 12, 0, 0)
+    block = "def starter_template():\n    pass\n"
+
+    events = []
+    events.extend(_typing_edits(block, base, start_ms=0))
+    events.append({
+        "type": "edit", "document": "main.py",
+        "timestamp": _ts(base, 10_000),
+        "offset": 0, "oldFragment": block, "newFragment": "",
+    })
+    events.append(_paste_edit(block, 0, _ts(base, 15_000)))
+
+    session = analyze_inputs(events, approved_fragments=[block])
+    paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
+    assert len(paste_bursts) == 1
+    assert paste_bursts[0]["kind"] == "approved paste"
+    assert session["total_internal_pastes"] == 0
+    assert session["total_approved_pastes"] == 1
+
+
+def test_external_fragment_still_unapproved():
+    """A pasted fragment that has NEVER been in the document is unapproved."""
+    base = datetime(2026, 5, 14, 12, 0, 0)
+
+    events = []
+    events.extend(_typing_edits("print('hello')\n", base, start_ms=0))
+    events.append(_paste_edit(
+        "import requests\nr = requests.get('https://example.com')\nprint(r.text)\n",
+        len("print('hello')\n"),
+        _ts(base, 10_000),
+    ))
+
+    session = analyze_inputs(events, approved_fragments=[])
+    paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
+    assert len(paste_bursts) == 1
+    assert paste_bursts[0]["kind"] == "unapproved paste"
+    assert session["total_unapproved_pastes"] == 1
+    assert session["total_internal_pastes"] == 0
