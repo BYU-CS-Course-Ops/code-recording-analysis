@@ -82,6 +82,7 @@ def _row_from_session(problem, submission, session_info: Session, student_id, st
         'num_ide_actions': session_info['total_ide_actions'],
         'num_unapproved_pastes': session_info['total_unapproved_pastes'],
         'num_approved_pastes': session_info['total_approved_pastes'],
+        'num_internal_pastes': session_info['total_internal_pastes'],
         'num_edits': session_info['total_edits'],
         'num_chars': len(final_doc)
     }
