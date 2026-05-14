@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from recan.algorithm import DocumentMatcher
 from recan.structure import (
     Burst,
     FocusInterval,
@@ -9,7 +10,6 @@ from recan.structure import (
     TimelineEntry
 )
 from recan.utils import (
-    apply_edit,
     event_kind,
     is_generated_edit,
     is_ide_action,
@@ -29,9 +29,10 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
     Inputs are assumed to be chronological and pre-filtered by file type
     (filtering happens in `utils.load_recording`).
 
-    Move detection: a generated insert whose fragment matches a previously
-    deleted fragment (>1 char) is treated as a move and skipped. The previous
-    paste-then-delete retroactive cancellation is intentionally not implemented.
+    Internal-paste detection: each generated edit's fragment is checked
+    against the full prior document-state history via a suffix array. A
+    burst whose generated edits all match prior content is labeled
+    'internal paste' (block reordering / self-copy-paste).
     """
     events: list[dict] = []
     focus_intervals: list[FocusInterval] = []
@@ -40,7 +41,7 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
     generated_entries: list[dict] = []
     timeline: list[TimelineEntry] = []
 
-    document = ""
+    matcher = DocumentMatcher()
     document_name = ""
     blur_idx: int | None = None
     blur_ts: datetime | None = None
@@ -48,7 +49,6 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
     start_time: datetime | None = None
     end_time: datetime | None = None
     total_time_unfocused = 0.0
-    deleted_fragments: dict[str, int] = {}
     edit_count = 0
 
     for event in inputs:
@@ -101,7 +101,8 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
             doc = event.get("document", "")
             if document_name == "" and doc:
                 document_name = doc
-            document = apply_edit(document, offset, old_fragment, new_fragment)
+            generated = is_generated_edit(event)
+            matcher.apply_edit(offset, old_fragment, new_fragment, is_generated=generated)
 
             events.append({
                 "timestamp": event["timestamp"],
@@ -112,25 +113,19 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
             })
             edit_count += 1
 
-            if len(old_fragment) > 1:
-                deleted_fragments[old_fragment] = deleted_fragments.get(old_fragment, 0) + 1
-
-            if is_generated_edit(event):
-                if deleted_fragments.get(new_fragment, 0) > 0:
-                    deleted_fragments[new_fragment] -= 1
-                else:
-                    generated_entries.append({
-                        "timestamp": ts,
-                        "event_idx": len(events) - 1,
-                        "line_count": new_fragment.count("\n") + 1,
-                        "char_count": len(new_fragment),
-                        "fragment": new_fragment,
-                    })
+            if generated:
+                generated_entries.append({
+                    "timestamp": ts,
+                    "event_idx": len(events) - 1,
+                    "line_count": new_fragment.count("\n") + 1,
+                    "char_count": len(new_fragment),
+                    "fragment": new_fragment,
+                })
 
             if edit_count % SNAPSHOT_INTERVAL_EVENTS == 0:
                 snapshots.append({
                     "after_idx": len(events) - 1,
-                    "document_text": document,
+                    "document_text": matcher.document,
                 })
 
     if events:
@@ -138,8 +133,13 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
         if last is None or last["after_idx"] != len(events) - 1:
             snapshots.append({
                 "after_idx": len(events) - 1,
-                "document_text": document,
+                "document_text": matcher.document,
             })
+
+    matcher.finalize()
+    internal_flags = matcher.resolve()
+    for entry, is_internal in zip(generated_entries, internal_flags):
+        entry["is_internal_paste"] = is_internal
 
     bursts: list[Burst] = []
     window = timedelta(milliseconds=BURST_GROUP_WINDOW_MS)
@@ -167,8 +167,12 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
 
         else:
             kept = max(group, key=lambda e: e["char_count"])
-            kind_label = "approved paste" if any(
-                e["fragment"] in approved_fragments for e in group) else "unapproved paste"
+            if any(e["fragment"] in approved_fragments for e in group):
+                kind_label = "approved paste"
+            elif all(e.get("is_internal_paste", False) for e in group):
+                kind_label = "internal paste"
+            else:
+                kind_label = "unapproved paste"
             line_count = sum(e["line_count"] for e in group)
             char_count = sum(e["char_count"] for e in group)
 
@@ -208,6 +212,7 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
     total_ide_actions = sum(1 for b in bursts if b["kind"] == "ide_action")
     total_unapproved_pastes = sum(1 for b in bursts if b["kind"] == "unapproved paste")
     total_approved_pastes = sum(1 for b in bursts if b["kind"] == "approved paste")
+    total_internal_pastes = sum(1 for b in bursts if b["kind"] == "internal paste")
 
     return {
         "document": document_name,
@@ -219,8 +224,9 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
         "total_edits": edit_count,
         "total_unapproved_pastes": total_unapproved_pastes,
         "total_approved_pastes": total_approved_pastes,
+        "total_internal_pastes": total_internal_pastes,
         "total_ide_actions": total_ide_actions,
-        "total_generated_events": total_ide_actions + total_unapproved_pastes + total_approved_pastes,
+        "total_generated_events": total_ide_actions + total_unapproved_pastes + total_approved_pastes + total_internal_pastes,
         "events": events,
         "focus_intervals": focus_intervals,
         "idle_gaps": idle_gaps,
