@@ -139,22 +139,28 @@ function renderTopbar() {
 function renderSummaryChips() {
   $("sum-edits").textContent       = STATE.summary.edit_count;
   $("sum-ide-actions").textContent = STATE.summary.ide_action_count ?? 0;
-  $("sum-pastes").textContent      = STATE.summary.paste_count ?? 0;
+  $("sum-approved-pastes").textContent   = STATE.summary.approved_paste_count ?? 0;
+  $("sum-unapproved-pastes").textContent = STATE.summary.unapproved_paste_count ?? 0;
   $("sum-unfocused").textContent   = fmtDuration(STATE.summary.unfocused_seconds);
   $("sum-idle").textContent        = String(STATE.idleGaps.length);
 }
 
 /* ---------- kind helpers ---------- */
 
-function kindClass(k) { return (k || "").replace(/_/g, "-"); }
+// Burst kinds use spaces ("approved paste", "unapproved paste") as the data
+// label, plus the legacy underscore form ("ide_action"). Normalize both to
+// hyphenated CSS class names: "approved paste" → "approved-paste".
+function kindClass(k) { return (k || "").replace(/[_\s]+/g, "-"); }
 function kindLabel(k) {
-  if (k === "ide_action") return "IDE action";
-  if (k === "paste")      return "Paste";
+  if (k === "ide_action")        return "IDE action";
+  if (k === "approved paste")    return "Approved paste";
+  if (k === "unapproved paste")  return "Unapproved paste";
   return "Event";
 }
 function kindIcon(k) {
-  if (k === "ide_action") return "A";
-  if (k === "paste")      return "P";
+  if (k === "ide_action")        return "A";
+  if (k === "approved paste")    return "✓";
+  if (k === "unapproved paste")  return "!";
   return "!";
 }
 
@@ -197,8 +203,12 @@ function renderStatsSidebar() {
           <span class="stat-value">${STATE.summary.ide_action_count ?? 0}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Pastes</span>
-          <span class="stat-value">${STATE.summary.paste_count ?? 0}</span>
+          <span class="stat-label">Approved pastes</span>
+          <span class="stat-value">${STATE.summary.approved_paste_count ?? 0}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Unapproved pastes</span>
+          <span class="stat-value">${STATE.summary.unapproved_paste_count ?? 0}</span>
         </div>
       </div>
     </div>
@@ -217,18 +227,19 @@ function renderFlagsList() {
 
   // Bucket events by kind so we can render collapsible groups.
   const groups = {
-    ide_action: { kind: "ide_action", cssKind: "ide-action", label: "IDE actions", icon: "A", items: [] },
-    paste:      { kind: "paste",      cssKind: "paste",      label: "Pastes",      icon: "P", items: [] },
-    unfocused:  { kind: "unfocused",  cssKind: "unfocused",  label: "Unfocused",   icon: "↗", items: [] },
+    ide_action:         { kind: "ide_action",        cssKind: "ide-action",       label: "IDE actions",        icon: "A", items: [] },
+    "approved paste":   { kind: "approved paste",   cssKind: "approved-paste",   label: "Approved pastes",   icon: "✓", items: [] },
+    "unapproved paste": { kind: "unapproved paste", cssKind: "unapproved-paste", label: "Unapproved pastes", icon: "!", items: [] },
+    unfocused:          { kind: "unfocused",         cssKind: "unfocused",        label: "Unfocused",          icon: "↗", items: [] },
   };
 
-  const counters = { ide_action: 0, paste: 0 };
+  const counters = { ide_action: 0, "approved paste": 0, "unapproved paste": 0 };
   STATE.bursts.forEach((b) => {
     const startT = STATE.events[b.start_idx]?.timestamp;
     const dur = b.end_idx > b.start_idx
       ? (Date.parse(STATE.events[b.end_idx].timestamp) - Date.parse(STATE.events[b.start_idx].timestamp)) / 1000
       : 0;
-    const k = b.kind || "paste";
+    const k = b.kind || "unapproved paste";
     counters[k] = (counters[k] || 0) + 1;
     const elapsed = (Date.parse(startT || STATE.meta.start_time) - Date.parse(STATE.meta.start_time)) / 1000;
     // char_count comes from the session summary — it's the canonical size of
@@ -245,7 +256,7 @@ function renderFlagsList() {
       if (apex) chars = apex.end - apex.start;
     }
     if (chars == null) chars = (b.end_idx - b.start_idx + 1);
-    (groups[k] || groups.paste).items.push({
+    (groups[k] || groups["unapproved paste"]).items.push({
       title: `${kindLabel(k)} #${counters[k]}`,
       meta: `+${fmtDuration(elapsed)} · ${chars} char${chars === 1 ? "" : "s"}`,
       idx: b.end_idx,
@@ -295,7 +306,7 @@ function renderFlagsList() {
       </details>`;
   };
 
-  host.innerHTML = [groups.ide_action, groups.paste, groups.unfocused].map(renderGroup).join("");
+  host.innerHTML = [groups.ide_action, groups["approved paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
 
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -323,7 +334,8 @@ function renderFlagsList() {
 function clearFragmentHighlight() {
   if (!window.CSS || !CSS.highlights) return;
   CSS.highlights.delete("burst-fragment-ide");
-  CSS.highlights.delete("burst-fragment-paste");
+  CSS.highlights.delete("burst-fragment-approved-paste");
+  CSS.highlights.delete("burst-fragment-unapproved-paste");
 }
 
 /* ---------- live edit highlights (playback-driven, fade after ~1s) ----------
@@ -341,7 +353,7 @@ const LIVE_FADE_MS = 900;     // then fade out over ~900ms
 
 function kindForEventIdx(idx) {
   for (const b of STATE.bursts) {
-    if (idx >= b.start_idx && idx <= b.end_idx) return b.kind || "paste";
+    if (idx >= b.start_idx && idx <= b.end_idx) return b.kind || "unapproved paste";
   }
   return "edit";
 }
@@ -387,7 +399,7 @@ function addLiveEdit(idx, offset, length) {
   // addLiveBurstHighlight() above.
   if (length <= 0) return;
   const kind = kindForEventIdx(idx);
-  if (kind !== "paste" && kind !== "ide_action") return;
+  if (kind !== "approved paste" && kind !== "unapproved paste" && kind !== "ide_action") return;
   liveEdits.push({
     kind,
     start: offset,
@@ -493,7 +505,7 @@ function paintLiveEdits() {
         merged.push(entry);
       }
     }
-    const cls = "eh-rect eh-" + e.kind.replace(/_/g, "-");
+    const cls = "eh-rect eh-" + kindClass(e.kind);
     for (const m of merged) {
       const w = m.right - m.left;
       const h = m.bottom - m.top;
@@ -666,7 +678,9 @@ function highlightBurstFragment(burst, apex) {
       }
       if (started && pos + len >= end) {
         range.setEnd(node, end - pos);
-        const name = burst.kind === "ide_action" ? "burst-fragment-ide" : "burst-fragment-paste";
+        const name = burst.kind === "ide_action"
+          ? "burst-fragment-ide"
+          : ("burst-fragment-" + kindClass(burst.kind));
         try {
           CSS.highlights.set(name, new Highlight(range));
         } catch (e) { /* noop */ }
@@ -739,7 +753,7 @@ const BURST_APEX_BY_IDX = (() => {
       map.set(fireIdx, {
         burst: b,
         apexIdx: fireIdx,
-        kind: b.kind || "paste",
+        kind: b.kind || "unapproved paste",
         start: pos,
         end: pos + fragment.length,
       });
@@ -751,7 +765,7 @@ const BURST_APEX_BY_IDX = (() => {
           map.set(apex.apexIdx, {
             burst: b,
             apexIdx: apex.apexIdx,
-            kind: b.kind || "paste",
+            kind: b.kind || "unapproved paste",
             start: apex.start,
             end: apex.end,
           });
@@ -1006,15 +1020,17 @@ function timelineHover(clientX) {
 let _activeBurst = null;
 let _flashTimer = null;
 
+const BURST_KIND_CLASSES = ["ide-action", "approved-paste", "unapproved-paste"];
+
 function setBannerKind(banner, kind) {
-  banner.classList.remove("ide-action", "paste");
+  banner.classList.remove(...BURST_KIND_CLASSES);
   banner.classList.add(kindClass(kind));
   const txt = $("burst-banner-text");
   if (txt) txt.textContent = kindLabel(kind);
 }
 
 function setWrapFlashKind(wrap, kind) {
-  wrap.classList.remove("ide-action", "paste");
+  wrap.classList.remove(...BURST_KIND_CLASSES);
   wrap.classList.remove("burst-flash");
   // restart animation
   void wrap.offsetWidth;
@@ -1036,7 +1052,7 @@ function maybeFlashBurst() {
       banner.classList.add("show");
       if (_flashTimer) clearTimeout(_flashTimer);
       _flashTimer = setTimeout(() => {
-        wrap.classList.remove("burst-flash", "ide-action", "paste");
+        wrap.classList.remove("burst-flash", ...BURST_KIND_CLASSES);
       }, 700);
       return;
     }
