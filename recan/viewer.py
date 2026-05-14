@@ -53,6 +53,7 @@ def _to_player_bundle(session: Session) -> dict:
             "ide_action_count": session["total_ide_actions"],
             "approved_paste_count": session["total_approved_pastes"],
             "unapproved_paste_count": session["total_unapproved_pastes"],
+            "internal_paste_count": session["total_internal_pastes"],
         },
     }
 

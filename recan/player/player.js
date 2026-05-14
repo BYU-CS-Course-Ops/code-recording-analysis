@@ -140,6 +140,7 @@ function renderSummaryChips() {
   $("sum-edits").textContent       = STATE.summary.edit_count;
   $("sum-ide-actions").textContent = STATE.summary.ide_action_count ?? 0;
   $("sum-approved-pastes").textContent   = STATE.summary.approved_paste_count ?? 0;
+  $("sum-internal-pastes").textContent   = STATE.summary.internal_paste_count ?? 0;
   $("sum-unapproved-pastes").textContent = STATE.summary.unapproved_paste_count ?? 0;
   $("sum-unfocused").textContent   = fmtDuration(STATE.summary.unfocused_seconds);
   $("sum-idle").textContent        = String(STATE.idleGaps.length);
@@ -154,12 +155,14 @@ function kindClass(k) { return (k || "").replace(/[_\s]+/g, "-"); }
 function kindLabel(k) {
   if (k === "ide_action")        return "IDE action";
   if (k === "approved paste")    return "Approved paste";
+  if (k === "internal paste")    return "Internal paste";
   if (k === "unapproved paste")  return "Unapproved paste";
   return "Event";
 }
 function kindIcon(k) {
   if (k === "ide_action")        return "A";
   if (k === "approved paste")    return "✓";
+  if (k === "internal paste")    return "↻";
   if (k === "unapproved paste")  return "!";
   return "!";
 }
@@ -207,6 +210,10 @@ function renderStatsSidebar() {
           <span class="stat-value">${STATE.summary.approved_paste_count ?? 0}</span>
         </div>
         <div class="stat">
+          <span class="stat-label">Internal pastes</span>
+          <span class="stat-value">${STATE.summary.internal_paste_count ?? 0}</span>
+        </div>
+        <div class="stat">
           <span class="stat-label">Unapproved pastes</span>
           <span class="stat-value">${STATE.summary.unapproved_paste_count ?? 0}</span>
         </div>
@@ -229,11 +236,12 @@ function renderFlagsList() {
   const groups = {
     ide_action:         { kind: "ide_action",        cssKind: "ide-action",       label: "IDE actions",        icon: "A", items: [] },
     "approved paste":   { kind: "approved paste",   cssKind: "approved-paste",   label: "Approved pastes",   icon: "✓", items: [] },
+    "internal paste":   { kind: "internal paste",   cssKind: "internal-paste",   label: "Internal pastes",   icon: "↻", items: [] },
     "unapproved paste": { kind: "unapproved paste", cssKind: "unapproved-paste", label: "Unapproved pastes", icon: "!", items: [] },
     unfocused:          { kind: "unfocused",         cssKind: "unfocused",        label: "Unfocused",          icon: "↗", items: [] },
   };
 
-  const counters = { ide_action: 0, "approved paste": 0, "unapproved paste": 0 };
+  const counters = { ide_action: 0, "approved paste": 0, "internal paste": 0, "unapproved paste": 0 };
   STATE.bursts.forEach((b) => {
     const startT = STATE.events[b.start_idx]?.timestamp;
     const dur = b.end_idx > b.start_idx
@@ -306,7 +314,7 @@ function renderFlagsList() {
       </details>`;
   };
 
-  host.innerHTML = [groups.ide_action, groups["approved paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
+  host.innerHTML = [groups.ide_action, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
 
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -335,6 +343,7 @@ function clearFragmentHighlight() {
   if (!window.CSS || !CSS.highlights) return;
   CSS.highlights.delete("burst-fragment-ide");
   CSS.highlights.delete("burst-fragment-approved-paste");
+  CSS.highlights.delete("burst-fragment-internal-paste");
   CSS.highlights.delete("burst-fragment-unapproved-paste");
 }
 
@@ -399,7 +408,7 @@ function addLiveEdit(idx, offset, length) {
   // addLiveBurstHighlight() above.
   if (length <= 0) return;
   const kind = kindForEventIdx(idx);
-  if (kind !== "approved paste" && kind !== "unapproved paste" && kind !== "ide_action") return;
+  if (kind !== "approved paste" && kind !== "unapproved paste" && kind !== "internal paste" && kind !== "ide_action") return;
   liveEdits.push({
     kind,
     start: offset,
@@ -1020,7 +1029,7 @@ function timelineHover(clientX) {
 let _activeBurst = null;
 let _flashTimer = null;
 
-const BURST_KIND_CLASSES = ["ide-action", "approved-paste", "unapproved-paste"];
+const BURST_KIND_CLASSES = ["ide-action", "approved-paste", "internal-paste", "unapproved-paste"];
 
 function setBannerKind(banner, kind) {
   banner.classList.remove(...BURST_KIND_CLASSES);
