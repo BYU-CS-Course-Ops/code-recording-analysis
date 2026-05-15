@@ -1,3 +1,5 @@
+from pydivsufsort import divsufsort, sa_search
+
 class DocumentMatcher:
     """Tracks the live document and the full history of its states, then
     answers "did this fragment ever appear in the document before this point?"
@@ -30,14 +32,12 @@ class DocumentMatcher:
         self._history_bytes += self._current.encode("utf-8") + self.SENTINEL
 
     def finalize(self) -> None:
-        from pydivsufsort import divsufsort
         self._sa = divsufsort(self._history_bytes)
 
     def resolve(self) -> list[bool]:
         return [self._contains(frag, before_pos) for frag, before_pos in self._pending_checks]
 
     def _contains(self, fragment: str, before_pos: int) -> bool:
-        from pydivsufsort import sa_search
         if not fragment:
             return False
         fb = fragment.encode("utf-8")

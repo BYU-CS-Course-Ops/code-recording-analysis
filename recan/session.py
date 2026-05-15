@@ -14,7 +14,7 @@ from recan.utils import (
     is_generated_edit,
     is_ide_action,
     language_from_extension,
-    parse_ts,
+    parse_ts, normalize_newlines,
 )
 
 BURST_GROUP_WINDOW_MS = 100
@@ -22,7 +22,7 @@ IDLE_GAP_THRESHOLD_SECONDS = 5.0
 SNAPSHOT_INTERVAL_EVENTS = 200
 
 
-def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> Session:
+def analyze_inputs(inputs: list[dict], approved_fragment_string: str | None) -> Session:
     """Walk the (already filtered) event stream once and produce a Session.
 
     Single source of truth for both the markdown summary and the HTML player.
@@ -167,7 +167,7 @@ def analyze_inputs(inputs: list[dict], approved_fragments: list[str] | None) -> 
 
         else:
             kept = max(group, key=lambda e: e["char_count"])
-            if any(e["fragment"] in approved_fragments for e in group):
+            if approved_fragment_string and any(normalize_newlines(e['fragment']) in approved_fragment_string for e in group):
                 kind_label = "approved paste"
             elif all(e.get("is_internal_paste", False) for e in group):
                 kind_label = "internal paste"
