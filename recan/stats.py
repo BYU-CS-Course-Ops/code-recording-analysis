@@ -28,6 +28,7 @@ CSV_COLUMNS = [
     'num_ide_actions',
     'num_unapproved_pastes',
     'num_approved_pastes',
+    'num_internal_pastes',
     'num_edits',
     'num_chars'
 ]
@@ -40,6 +41,7 @@ NUMERIC_COLUMNS = [
     'num_ide_actions',
     'num_unapproved_pastes',
     'num_approved_pastes',
+    'num_internal_pastes',
     'num_edits',
     'num_chars',
 ]
