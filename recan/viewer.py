@@ -51,7 +51,9 @@ def _to_player_bundle(session: Session) -> dict:
             "edit_count": session["total_edits"],
             "generated_count": len(session["bursts"]),
             "ide_action_count": session["total_ide_actions"],
-            "paste_count": session["total_pastes"],
+            "approved_paste_count": session["total_approved_pastes"],
+            "unapproved_paste_count": session["total_unapproved_pastes"],
+            "internal_paste_count": session["total_internal_pastes"],
         },
     }
 

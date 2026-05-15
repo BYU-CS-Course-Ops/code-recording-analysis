@@ -9,6 +9,8 @@ packages = [{ include = "recan" }]
 [tool.poetry.dependencies]
 python = "^3.12"
 Jinja2 = "^3.1.6"
+pydivsufsort = "^0.0.20"
+PyYAML = "^6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.2"
