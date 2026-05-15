@@ -1,13 +1,11 @@
 import gzip
+import yaml
 import json
 
 from datetime import datetime
 from pathlib import Path
 
 from .structure import CREATE_FUNCTION_PATTERN, MAIN_BLOCK_PATTERN
-
-
-GENERATED_MIN_CHARS_SINGLE_LINE = 20
 
 
 def parse_ts(value: str) -> datetime:
@@ -56,21 +54,36 @@ def is_generated_edit(event: dict) -> bool:
     to be either multi-line or substantively long on a single line.
     """
     fragment = event.get("newFragment", "")
+
+    # If a student is truly typing fragments should only be 1 char
+    if len(fragment) == 1:
+        return False
+
+    # Pure whitespace
     if not fragment.strip():
         return False
-    if not (any(c == ' ' for c in fragment) and any(c != ' ' for c in fragment)):
+
+    # IDE Tab completes
+    if all(c in 'abcdefghijklmnopqrstuvwxyz0123456789_' for c in fragment.rstrip('()').lower()):
         return False
-    if "\n" in fragment:
-        return True
-    return len(fragment) >= GENERATED_MIN_CHARS_SINGLE_LINE
+
+    # Commented out line
+    if fragment.startswith('#'):
+        return False
+
+    # If not one of the previous checks it is probably a "Paste" event
+    return True
 
 
-def is_ide_action(fragment: str) -> bool:
+def is_ide_action(group: list[dict]) -> bool:
     """Heuristic for this edit looks like an IDE auto-completion or refactor."""
-    return bool(
-        CREATE_FUNCTION_PATTERN.search(fragment) or
-        MAIN_BLOCK_PATTERN.search(fragment)
+    # TODO: Need a refactor/rename heuristic
+    return (
+            any(CREATE_FUNCTION_PATTERN.fullmatch(e['fragment']) for e in group)
+            or
+            any(MAIN_BLOCK_PATTERN.fullmatch(e['fragment']) for e in group)
     )
+
 
 def apply_edit(document: str, offset: int, old_fragment: str, new_fragment: str) -> str:
     """Apply a single edit to the in-memory document string."""
@@ -115,9 +128,27 @@ def load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "rt") as f:
         events = [json.loads(line) for line in f]
+
+    # TODO: Check if acceptable: Remove the first event. Contains what was already on the screen when recording started.
+    events.pop(0)
+
     if not excluded_file_types:
         return events
     return [
         e for e in events
         if not any(e.get("document", "").endswith(ext) for ext in excluded_file_types)
     ]
+
+
+def normalize_newlines(text, target='\n') -> str:
+    # splitlines() handles \n, \r, and \r\n automatically
+    return target.join(text.splitlines())
+
+
+def load_approved_fragments(approved_fragments_path: Path | None) -> str | None:
+    approved_fragments_path = Path(approved_fragments_path)
+    if approved_fragments_path.is_file():
+        return normalize_newlines(approved_fragments_path.read_text())
+
+    print(f"Warning: Approved fragments file not found at {approved_fragments_path}. All fragments will be treated as unapproved.")
+    return None
