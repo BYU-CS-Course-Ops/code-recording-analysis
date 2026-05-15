@@ -24,6 +24,7 @@ def render_markdown(session: Session) -> str:
         session=session,
         format_ts=format_ts,
         format_duration=format_duration,
+        len=len,
     )
 
 
