@@ -24,7 +24,7 @@
 - **{{ format_ts(entry.timestamp) }}** — {{ entry.kind | title }} ({{ entry.line_count }} lines, {{ entry.char_count }} chars)
 
 ```{{ session.language }}
-{{ entry.fragment | indent(2) }}
+{{ entry.fragment }}
 ```
 
 {% endif -%}
