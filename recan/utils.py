@@ -146,7 +146,12 @@ def normalize_newlines(text, target='\n') -> str:
 
 
 def load_approved_fragments(approved_fragments_path: Path | None) -> str | None:
-    approved_fragments_path = Path(approved_fragments_path)
+    try:
+        approved_fragments_path = Path(approved_fragments_path)
+    except Exception as e:
+            print(f"Error: Invalid path for approved fragments: {approved_fragments_path}. All fragments will be treated as unapproved. Error details: {e}")
+            return None
+
     if approved_fragments_path.is_file():
         return normalize_newlines(approved_fragments_path.read_text())
 
