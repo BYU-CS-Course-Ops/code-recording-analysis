@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Sequence
 
 from recan.algorithm import DocumentMatcher
 from recan.structure import (
@@ -22,7 +23,11 @@ IDLE_GAP_THRESHOLD_SECONDS = 5.0
 SNAPSHOT_INTERVAL_EVENTS = 200
 
 
-def analyze_inputs(inputs: list[dict], approved_fragment_string: str | None) -> Session:
+def analyze_inputs(
+    inputs: list[dict],
+    extras: Sequence[DocumentMatcher] = (),
+    approved_fragment_string: str | None = None,
+) -> Session:
     """Walk the (already filtered) event stream once and produce a Session.
 
     Single source of truth for both the markdown summary and the HTML player.
@@ -102,7 +107,7 @@ def analyze_inputs(inputs: list[dict], approved_fragment_string: str | None) -> 
             if document_name == "" and doc:
                 document_name = doc
             generated = is_generated_edit(event)
-            matcher.apply_edit(offset, old_fragment, new_fragment, is_generated=generated)
+            matcher.apply_edit(offset, old_fragment, new_fragment, is_generated=generated, ts=ts)
 
             events.append({
                 "timestamp": event["timestamp"],
@@ -137,7 +142,7 @@ def analyze_inputs(inputs: list[dict], approved_fragment_string: str | None) -> 
             })
 
     matcher.finalize()
-    internal_flags = matcher.resolve()
+    internal_flags = matcher.resolve(extras)
     for entry, is_internal in zip(generated_entries, internal_flags):
         entry["is_internal_paste"] = is_internal
 
