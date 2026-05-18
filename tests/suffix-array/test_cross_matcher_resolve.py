@@ -95,10 +95,19 @@ def test_multiple_extras_match_via_second_extra():
 
 
 def test_unfinalized_extra_raises_runtime_error():
-    """Each extra must be finalize()-d before resolve() is called."""
+    """Each extra must be finalize()-d before resolve() is called.
+
+    Under the spec's literal self-match semantics, a generated fragment
+    always matches its own snapshot in `primary`, so `self._contains`
+    short-circuits the `any(extras...)` clause and unfinalized extras
+    never get queried. To actually exercise the extras path, we use an
+    empty generated fragment — `_contains("", ts)` returns False without
+    consulting `_sa`, which forces the extras iteration to run and
+    surfaces the missing-finalize RuntimeError on the extra.
+    """
     primary = DocumentMatcher()
     primary.apply_edit(0, "", "x = 1\n", is_generated=False, ts=_ts(100))
-    primary.apply_edit(6, "", "anything", is_generated=True, ts=_ts(500))
+    primary.apply_edit(6, "", "", is_generated=True, ts=_ts(500))
     primary.finalize()
 
     extra = DocumentMatcher()
