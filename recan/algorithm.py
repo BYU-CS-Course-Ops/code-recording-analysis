@@ -65,7 +65,7 @@ class DocumentMatcher:
         ]
 
     def _before_pos_at(self, ts: datetime) -> int:
-        i = bisect.bisect_right(self._snapshot_times, ts) - 1
+        i = bisect.bisect_left(self._snapshot_times, ts) - 1
         return self._snapshot_ends[i] if i >= 0 else 0
 
     def _contains(self, fragment: str, ts: datetime) -> bool:
