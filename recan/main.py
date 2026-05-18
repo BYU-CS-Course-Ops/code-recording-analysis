@@ -1,102 +1,157 @@
 import logging
 import webbrowser
-from argparse import ArgumentParser, Namespace
 from pathlib import Path
+from argparse import ArgumentParser, Namespace
 
-from recan.formaters import render_json, render_markdown
-from recan.session import analyze_inputs
-from recan.utils import load_recording, load_approved_fragments
-from recan.viewer import write_player_html
-from recan.stats import generate_stats
-from recan.structure import Session
-
-
-def _load_session(recording_file: Path, excluded_file_types: list[str],
-                  approved_fragments_path: Path | None) -> Session:
-    approved_fragments = load_approved_fragments(approved_fragments_path)
-    inputs = load_recording(recording_file, excluded_file_types)
-    return analyze_inputs(inputs, approved_fragments)
+from .formaters import render_json, render_markdown
+from .viewer import write_player_html
+from .stats import generate_stat_csvs
+from .utils import load_session, is_gradescope_export, generate_submission_student_map, generate_problem_set
 
 
-def cmd_summary(args: Namespace) -> None:
-    session = _load_session(args.recording_file, args.exclude, args.approved_fragments)
-    text = render_json(session) if args.json else render_markdown(session)
-    if args.output:
-        args.output.write_text(text, encoding="utf-8")
-        print(f"Wrote summary to {args.output}")
+def add_common(sp: ArgumentParser) -> None:
+    """
+    Add common arguments for both `summary`, `view`, and `stats` subcommands.
+
+    Arguments:
+        - `--exclude .ext1 .ext2 ...`: List of file extensions to exclude (e.g. ".html" ".md").
+        - `--approved-pastes approved.txt`: Path to a file containing all approved fragments.
+    
+    """
+    sp.add_argument("--exclude", nargs="*", default=[], help="List of file extensions to exclude (e.g. .html .md).")
+    sp.add_argument("--approved-pastes", type=Path, help="Path to a file containing all approved fragments. E.g. given blocks of code")
+
+
+def _handle_summary(args: Namespace) -> None:
+    session = load_session(args.recording_file, args.additional_recordings, args.exclude, args.approved_pastes)
+
+    if args.json:
+        content = render_json(session)
     else:
-        print(text)
+        content = render_markdown(session)
+
+    if args.output:
+        args.output.write_text(content, encoding="utf-8")
+    else:
+        print(content)
 
 
-def cmd_view(args: Namespace) -> None:
-    session = _load_session(args.recording_file, args.exclude, args.approved_fragments)
+def _parse_summary(subparsers):
+    """
+    Generate a summary of a recording, either as human-readable Markdown or structured JSON.
+
+    Usage: `recan summary
+                <recording_file>                                             - Required
+                [--exclude .ext1 .ext2 ...]                                  - Optional
+                [--approved-pastes approved.txt]                             - Optional
+                [--additional-recordings add1.jsonl.gz add2.jsonl.gz ...]    - Optional
+                [--output summary.md]                                        - Optional
+                [--json]`                                                    - Optional
+    """
+    summary = subparsers.add_parser("summary", help="Analyze a recording and print or write a JSON/Markdown summary.")
+
+    summary.add_argument("recording_file", type=Path, help="Path to the recording file (JSONL or gzipped JSONL).")
+
+    add_common(summary)
+
+    summary.add_argument("--additional-recordings", nargs="*", type=Path, default=None, help="Additional .jsonl.gz recordings to include. Accepts a folder (all .jsonl.gz files inside), a list of files, or omit. The primary recording_file is skipped if present.")
+    summary.add_argument("--output", type=Path, help="Path to write the summary (defaults to stdout).")
+    summary.add_argument("--json", action="store_true", help="Output as JSON instead of human-readable Markdown.")
+
+    summary.set_defaults(func=_handle_summary)
+
+
+def _handle_view(args: Namespace) -> None:
+    session = load_session(args.recording_file, args.additional_recordings, args.exclude, args.approved_pastes)
+
     html_path = write_player_html(session, args.recording_file)
-    print(f"Wrote playback HTML to {html_path}")
+
     if args.auto_open:
         webbrowser.open(html_path.resolve().as_uri())
 
 
-def cmd_stats(args: Namespace) -> None:
-    generate_stats(args.folder, args.output, args.include, args.exclude, args.approved_fragments)
+def _parse_view(subparsers):
+    """
+    Generate a self-contained HTML player for viewing a recording.
+
+    Usage: `recan view
+                <recording_file>                                             - Required
+                [--exclude .ext1 .ext2 ...]                                  - Optional
+                [--approved-pastes approved.txt]                             - Optional
+                [--additional-recordings add1.jsonl.gz add2.jsonl.gz ...]    - Optional
+                [--auto-open]`                                               - Optional (defaults to true)
+    """
+    view = subparsers.add_parser("view", help="Generate a self-contained HTML player for a recording.")
+
+    view.add_argument("recording_file", type=Path, help="Path to the recording file (JSONL or gzipped JSONL).")
+
+    add_common(view)
+
+    view.add_argument("--additional-recordings", nargs="*", type=Path, default=None, help="Additional .jsonl.gz recordings to include. Accepts a folder (all .jsonl.gz files inside), a list of files, or omit. The primary recording_file is skipped if present.")
+    view.add_argument("--auto-open", action="store_true", default=True, help="Open the generated HTML in the default web browser (default: true).")
+
+    view.set_defaults(func=_handle_view)
+
+
+def _handle_stats(args: Namespace) -> None:
+    if not is_gradescope_export(args.folder):
+        logging.error("Error: The specified folder does not appear to be a Gradescope export. Please check the folder structure and try again.")
+        return
+
+    submission_student_map = generate_submission_student_map(args.folder)
+
+    problems = {}
+    if args.problems:
+        problems = generate_problem_set(args.problems)
+
+    generate_stat_csvs(Path(args.folder), Path(args.output_path), problems, args.exlude, args.approved_pastes, submission_student_map)
+
+
+def _parse_stats(subparsers):
+    """
+    Generate a CSV file of problems in a folder of recordings, assumes Gradescope export structure.
+
+    Usage: `recan stats
+                <folder>                            - Required
+                <output>                            - Required
+                [--exclude .ext1 .ext2 ...]         - Optional
+                [--approved-pastes approved.txt]    - Optional
+                [--problems problems.yaml]          - Optional (defaults to all)
+    """
+
+    stats = subparsers.add_parser("stats", help="Generate CSV files of problems in a folder of recordings")
+
+    stats.add_argument("folder", type=Path, help="Path to a folder of recordings to analyze (Expects to be a Gradescope export).")
+    stats.add_argument("output", type=Path, help="Path to write the generated CSV file")
+
+    add_common(stats)
+
+    stats.add_argument("--problems", help="yaml file specifying which problems to include, e.g. by name. If omitted, includes all problems in the folder.")
+
+    stats.set_defaults(func=_handle_stats)
 
 
 def entry() -> None:
+    """
+    Entry point for `recan`.
+
+    Usage: `recan <command> [options]`
+
+    Commands:
+        - `summary`: Analyze a recording and print or write a JSON/Markdown summary.
+        - `view`: Generate a self-contained HTML player for a recording.
+        - `stats`: Generate CSV files of problems in a folder of recordings.
+    """
+
     logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-    # Top-level parser: `recan <command> ...`
     parser = ArgumentParser(description="Analyze IDE recording files.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Args shared by every subcommand: the recording path and the exclude filter.
-    def add_common(sp: ArgumentParser) -> None:
-        sp.add_argument("--exclude", nargs="*", default=[],
-                        help="List of file extensions to exclude (e.g. .html .md).")
-        sp.add_argument("--approved-fragments", type=Path,
-                        help="Path to a file containing all approved fragments. E.g. given blocks of code")
+    _parse_summary(subparsers)
+    _parse_view(subparsers)
+    _parse_stats(subparsers)
 
-    # `recan summary` — analysis output as Markdown (default) or JSON, to stdout or a file.
-    summary = subparsers.add_parser(
-        "summary", help="Analyze a recording and print or write a JSON/Markdown summary."
-    )
-    # Positional arg for the recording file
-    summary.add_argument("recording_file", type=Path,
-                         help="Path to the recording file (JSONL or gzipped JSONL).")
-    # Subcommand-specific args: output path and format (JSON vs Markdown).
-    add_common(summary)
-    summary.add_argument("--output", type=Path,
-                         help="Path to write the summary (defaults to stdout).")
-    summary.add_argument("--json", action="store_true",
-                         help="Output as JSON instead of human-readable Markdown.")
-    summary.set_defaults(func=cmd_summary)
-
-    # `recan view` — emits a self-contained HTML player and (by default) opens it.
-    view = subparsers.add_parser(
-        "view", help="Generate a self-contained HTML player for a recording."
-    )
-    # Positional arg for the recording file
-    view.add_argument("recording_file", type=Path,
-                         help="Path to the recording file (JSONL or gzipped JSONL).")
-    # Subcommand-specific args: whether to open the generated HTML in the default web browser.
-    add_common(view)
-    view.add_argument("--auto-open", action="store_true", default=True,
-                      help="Open the generated HTML in the default web browser (default: true).")
-    view.set_defaults(func=cmd_view)
-
-    # `recan stats` — generates CSV files of problem-level stats for a folder of recordings (e.g. a Gradescope export).
-    stats = subparsers.add_parser(
-        "stats", help="Generate CSV files of problems in a folder of recordings"
-    )
-    stats.add_argument("folder", type=Path,
-                       help="Path to a folder of recordings to analyze (Expects to be a Gradescope export).")
-    stats.add_argument("output", type=Path,
-                       help="Path to write the generated CSV file")
-    # Subcommand-specific args: a filter to specify which recordings to include, e.g. by problem name.
-    add_common(stats)
-    stats.add_argument("--include",
-                       help="A filter to specify which recordings to include, e.g. by problem name. Takes list of strings or json file with list of strings.")
-    stats.set_defaults(func=cmd_stats)
-
-    # Dispatch: each subparser attaches its handler via set_defaults(func=...).
     args = parser.parse_args()
     args.func(args)
 
