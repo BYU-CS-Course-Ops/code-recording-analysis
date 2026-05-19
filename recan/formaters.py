@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
+from textwrap import dedent
 
 import jinja2
 
 from recan.structure import Session
 from recan.utils import format_duration, format_ts
-
 
 _TEMPLATE_PATH = Path(__file__).resolve().parent / "timeline.md.jinja"
 
@@ -25,6 +25,7 @@ def render_markdown(session: Session) -> str:
         format_ts=format_ts,
         format_duration=format_duration,
         len=len,
+        dedent=dedent,
     )
 
 

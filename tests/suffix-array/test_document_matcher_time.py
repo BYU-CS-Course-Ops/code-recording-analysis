@@ -31,14 +31,21 @@ def test_before_pos_at_ts_strictly_before_first_snapshot_returns_zero():
     assert m._before_pos_at(_ts(500)) == 0
 
 
-def test_before_pos_at_ts_equals_snapshot_returns_that_snapshots_end():
-    """bisect_right's contract: ts equal to a snapshot timestamp returns
-    that snapshot's end offset, not the prior one."""
+def test_before_pos_at_ts_equals_snapshot_returns_prior_snapshots_end():
+    """bisect_left's contract: ts equal to a snapshot timestamp returns the
+    PRIOR snapshot's end offset, not that snapshot's own end. This is the
+    self-capture guard — a generated edit's queued check runs at the same ts
+    as its own snapshot, and we want that snapshot excluded from the search.
+    """
     m = DocumentMatcher()
     m.apply_edit(0, "", "aaa", is_generated=False, ts=_ts(100))
     end_at_100 = len(m._history_bytes)
     m.apply_edit(3, "", "bbb", is_generated=False, ts=_ts(200))
-    assert m._before_pos_at(_ts(100)) == end_at_100
+    # ts == 100 excludes the snapshot at 100; only snapshots strictly before
+    # 100 count, and there are none.
+    assert m._before_pos_at(_ts(100)) == 0
+    # ts == 200 excludes the snapshot at 200; the snapshot at 100 still counts.
+    assert m._before_pos_at(_ts(200)) == end_at_100
 
 
 def test_before_pos_at_ts_strictly_after_last_returns_last_end():
@@ -49,14 +56,14 @@ def test_before_pos_at_ts_strictly_after_last_returns_last_end():
     assert m._before_pos_at(_ts(9999)) == last_end
 
 
-def test_before_pos_at_duplicate_timestamps_returns_latest_end():
-    """Two edits in the same millisecond — return the *latest* snapshot
-    end offset for that timestamp."""
+def test_before_pos_at_duplicate_timestamps_excludes_all_at_that_ts():
+    """Two edits in the same millisecond — with bisect_left, neither counts
+    as "before" that millisecond. Without a prior snapshot, the cutoff is 0.
+    """
     m = DocumentMatcher()
     m.apply_edit(0, "", "aaa", is_generated=False, ts=_ts(100))
     m.apply_edit(3, "", "bbb", is_generated=False, ts=_ts(100))
-    latest_end = len(m._history_bytes)
-    assert m._before_pos_at(_ts(100)) == latest_end
+    assert m._before_pos_at(_ts(100)) == 0
 
 
 # ---------- _contains via ts ----------
