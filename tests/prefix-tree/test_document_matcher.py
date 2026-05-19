@@ -81,37 +81,16 @@ def test_sentinel_prevents_matches_spanning_snapshots():
 def test_generated_fragment_does_not_match_its_own_snapshot():
     """A generated edit must not match its own freshly-appended snapshot.
 
-    With the timestamp gate, the generated edit's `ts` equals the snapshot's
-    `ts`, so `_before_pos_at(ts)` returns the END of that snapshot — meaning
-    the fragment WOULD match itself unless we rely on `before_pos`-style
-    filtering. The actual gate that protects against self-match is the
-    `int(p) + flen <= before_pos` check: the fragment's own bytes end exactly
-    at `before_pos`, so the `<=` is satisfied... wait — read the gate carefully.
-
-    The fragment lives at the tail of its own snapshot. Its bytes start at
-    `snapshot_start` and end at `before_pos - 1` (the byte before the
-    sentinel). So `p + flen == before_pos`, which satisfies `<= before_pos`,
-    which would falsely report a self-match.
-
-    This is intentional and matches prior behavior: a generated fragment
-    that's only in its own snapshot is also in *prior* history if and only if
-    it appeared somewhere before. Here it didn't, so the only match position
-    is at the end of its own snapshot — that *does* satisfy `<= before_pos`,
-    and the test below confirms it's still flagged True. The byte-offset
-    version of this test relied on `before_pos` being captured *before* the
-    snapshot was appended; the timestamp version captures `before_pos` from
-    the snapshot of the same edit, so self-match IS expected.
-
-    See the e2e tests in test_internal_paste_e2e.py for the real-world
-    behavior — internal-paste detection still works because a true internal
-    paste matches an *earlier* snapshot too, not just its own.
+    `_before_pos_at` uses bisect_left, so a queued check at ts=T sees a
+    cutoff equal to the end of the snapshot strictly BEFORE ts=T. The
+    snapshot created by the edit being queried — which is at ts=T exactly —
+    is excluded, so a fragment that only lives there cannot self-match.
     """
     m = DocumentMatcher()
     m.apply_edit(0, "", "totally_new_fragment_xyz", is_generated=True, ts=_ts(100))
     m.finalize()
     flags = m.resolve()
-    # Self-only match against its own snapshot is now True; documented above.
-    assert flags == [True]
+    assert flags == [False]
 
 
 def test_generated_fragment_matches_prior_history():
@@ -132,6 +111,6 @@ def test_resolve_returns_list_in_order():
     m.apply_edit(0, "", "alpha\n", is_generated=True, ts=_ts(300))
     m.finalize()
     flags = m.resolve()
-    # Both generated fragments now match self-snapshot (see docstring on
-    # test_generated_fragment_does_not_match_its_own_snapshot above).
-    assert flags == [True, True]
+    # beta@200 only exists in its own (excluded) snapshot → False.
+    # alpha@300 was typed earlier at ts=100, found in that prior snapshot → True.
+    assert flags == [False, True]

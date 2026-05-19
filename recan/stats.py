@@ -1,15 +1,10 @@
 import csv
-import gzip
-import json
 import logging
-import yaml
-import zlib
 
 from pathlib import Path
 
-from recan.session import analyze_inputs
 from recan.structure import Session
-from recan.utils import load_recording, load_approved_fragments, build_suffix_array, resolve_additional, load_session
+from recan.session import load_session
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +121,7 @@ def generate_stat_csvs(folder: Path, output_path: Path,
                     excluded_count += 1
                     continue
 
-            session = load_session(recording, approved_fragments_path, excluded_file_types, submission)
+            session = load_session(recording, approved_fragments_path, excluded_file_types, additional_recordings=submission)
 
             student_id, student_email = submission_student_map.get(submission.name, (None, None))
 

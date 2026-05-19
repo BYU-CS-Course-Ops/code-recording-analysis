@@ -20,6 +20,7 @@ MAIN_BLOCK_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+
 class Input(TypedDict):
     type: Literal['focusStatus', 'edit']
     editor: str
