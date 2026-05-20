@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Sequence
 
-from recan.algorithm import DocumentMatcher
+from recan.algorithm import DocumentMatcher, build_matcher
 from recan.structure import (
     Burst,
     FocusInterval,
@@ -14,9 +14,10 @@ from recan.structure import (
 )
 from recan.utils import (
     language_from_extension,
-    load_recording,
+    load_recordings,
     normalize_newlines,
     parse_ts,
+    splice,
 )
 from recan.structure import CREATE_FUNCTION_PATTERN, MAIN_BLOCK_PATTERN
 
@@ -35,7 +36,7 @@ class _SessionState:
     bursts: list[Burst] = field(default_factory=list)
     generated_entries: list[dict] = field(default_factory=list)
     timeline: list[TimelineEntry] = field(default_factory=list)
-    matcher: DocumentMatcher = field(default_factory=DocumentMatcher)
+    document: str = ""
     document_name: str = ""
     blur_idx: int | None = None
     blur_ts: datetime | None = None
@@ -99,6 +100,24 @@ def _is_generated_edit(event: dict) -> bool:
     return True
 
 
+def _is_internal_paste(
+        fragment: str,
+        ts: datetime,
+        matchers: Sequence[DocumentMatcher],
+) -> bool:
+    """
+    Has this fragment appeared in any matcher's history strictly before `ts`?
+
+    Checks:
+        - For each matcher (this recording's own and any overlapping recordings'),
+          does the corpus contain `fragment` in a snapshot that predates `ts`?
+        - Self-capture is prevented by the matcher's own bisect_left cutoff —
+          a fragment generated at ts only matches if it also lived in some
+          earlier snapshot.
+    """
+    return any(m.contains(fragment, ts) for m in matchers)
+
+
 def _is_ide_action(event: dict) -> bool:
     """
     Heuristic for "this edit looks like an IDE auto-completion or refactor."
@@ -121,64 +140,30 @@ def _is_ide_action(event: dict) -> bool:
     return False
 
 
-def _build_suffix_array(events: list[dict]) -> DocumentMatcher:
+def _is_approved_paste(event: dict, approved_pastes: str | None) -> bool:
     """
-    Build a suffix array from the event stream for efficient substring search.
+    Heuristic for "this generated edit matches a fragment in the approved-fragments file."
 
-    Usage: Used to see if recordings contain "internal paste" events from a session they
-    already worked on, which can help identify when a student is pasting in code they
-    previously wrote (and thus "approving" that fragment).
+    Checks:
+        - Does the event contain a fragment that appears in the approved-fragments file?
     """
 
-    matcher = DocumentMatcher()
+    if not approved_pastes:
+        return False
 
-    for event in events:
-        if _event_kind(event) == "edit":
-            matcher.apply_edit(
-                offset=event["offset"],
-                old_fragment=event["oldFragment"],
-                new_fragment=event["newFragment"],
-                is_generated=_is_generated_edit(event),
-                ts=parse_ts(event["timestamp"]),
-            )
-
-    matcher.finalize()
-
-    return matcher
+    fragment = event.get("newFragment", "")
+    return normalize_newlines(fragment) in approved_pastes
 
 
-def _load_approved_fragments(approved_fragments_path: Path | None) -> str | None:
-    if not approved_fragments_path:
+def _load_approved_pastes(approved_pastes_path: Path | None) -> str | None:
+    if not approved_pastes_path:
         return ''
 
-    approved_fragments_path = Path(approved_fragments_path)
-    if approved_fragments_path.is_file():
-        return normalize_newlines(approved_fragments_path.read_text())
+    approved_pastes_path = Path(approved_pastes_path)
+    if approved_pastes_path.is_file():
+        return normalize_newlines(approved_pastes_path.read_text())
 
     return ''
-
-
-def _resolve_additional(paths: Path | list[Path] | None, recording_file: Path) -> list[Path]:
-    if not paths:
-        return []
-
-    candidates = []
-
-    for path in paths:
-        if path.is_dir():
-            jsonl_gz_paths = [Path(p) for p in path.glob("*.jsonl.gz")]
-            jsonl_paths = [Path(p) for p in path.glob("*.jsonl")]
-
-            candidates.extend(jsonl_gz_paths + jsonl_paths)
-        else:
-            candidates.append(Path(path))
-
-    recording_resolved = recording_file.resolve()
-
-    if not candidates:
-        return []
-
-    return [p for p in candidates if p.resolve() != recording_resolved]
 
 
 def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
@@ -193,10 +178,9 @@ def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
     if state.prev_ts is not None:
         gap_seconds = (ts - state.prev_ts).total_seconds()
         if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS:
-            gap_duration = gap_seconds
             idle_gap: IdleGap = {
                 "after_idx": len(state.events) - 1,
-                "duration": gap_duration,
+                "duration": gap_seconds,
             }
             state.idle_gaps.append(idle_gap)
 
@@ -245,12 +229,12 @@ def _handle_focus(event: dict, ts: datetime, state: _SessionState) -> None:
         state.blur_ts = None
 
 
-def _apply_edit_bookkeeping(event: dict, ts: datetime, state: _SessionState, is_generated: bool) -> None:
+def _apply_edit(event: dict, ts: datetime, state: _SessionState, is_generated: bool) -> None:
     """
-    Apply a single edit to the matcher and keep all per-session bookkeeping in sync.
+    Apply a single edit to state.document and record it in the session's bookkeeping.
 
     Updates:
-        - matcher document state (so suffix-array queries stay current)
+        - state.document (splice in the new fragment so snapshots stay current)
         - the canonical events list and edit_count
         - generated_entries (only when is_generated=True, used later for burst classification)
         - periodic snapshots (every SNAPSHOT_INTERVAL_EVENTS edits, for timeline scrubbing)
@@ -263,7 +247,7 @@ def _apply_edit_bookkeeping(event: dict, ts: datetime, state: _SessionState, is_
     if state.document_name == "" and doc:
         state.document_name = doc
 
-    state.matcher.apply_edit(offset, old_fragment, new_fragment, is_generated=is_generated, ts=ts)
+    state.document = splice(state.document, offset, old_fragment, new_fragment)
 
     edit_event = {
         "timestamp": event["timestamp"],
@@ -277,62 +261,44 @@ def _apply_edit_bookkeeping(event: dict, ts: datetime, state: _SessionState, is_
     state.edit_count += 1
 
     if is_generated:
-        line_count = new_fragment.count("\n") + 1
-        char_count = len(new_fragment)
-        generated_entry = {
+        state.generated_entries.append({
             "timestamp": ts,
             "event": event,
             "event_idx": len(state.events) - 1,
-            "line_count": line_count,
-            "char_count": char_count,
+            "line_count": new_fragment.count("\n") + 1,
+            "char_count": len(new_fragment),
             "fragment": new_fragment,
-        }
-        state.generated_entries.append(generated_entry)
+        })
 
     if state.edit_count % SNAPSHOT_INTERVAL_EVENTS == 0:
-        snapshot = {
+        state.snapshots.append({
             "after_idx": len(state.events) - 1,
-            "document_text": state.matcher.document,
-        }
-        state.snapshots.append(snapshot)
+            "document_text": state.document,
+        })
 
 
-def _flush_generated_group(pending: list[tuple[dict, datetime]], state: _SessionState) -> None:
+def _collapse_groups(entries: list[dict], window: timedelta) -> list[dict]:
     """
-    Commit a group of buffered generated edits as a single burst, keeping the longest fragment.
+    Collapse adjacent generated entries whose timestamps fall within `window` into one.
 
-    Usage: IDE completions often arrive as several near-simultaneous edits (e.g. a stub
-    followed by its filled-in body). Collapsing them to the longest fragment avoids
-    double-counting the same paste-like action.
+    Walks `entries` in order. From one entry to the next: if the gap is within
+    `window`, they're part of the same IDE burst — keep accumulating. Once the
+    gap exceeds `window`, the current group is closed (keeping the entry with
+    the longest fragment) and a new group starts.
     """
-    if not pending:
-        return
+    flushed: list[dict] = []
+    group: list[dict] = []
 
-    kept_event, kept_ts = max(pending, key=lambda pair: len(pair[0].get("newFragment", "")))
-    _apply_edit_bookkeeping(kept_event, kept_ts, state, is_generated=True)
-    pending.clear()
+    for entry in entries:
+        if group and (entry["timestamp"] - group[-1]["timestamp"]) > window:
+            flushed.append(max(group, key=lambda e: len(e["fragment"])))
+            group = []
+        group.append(entry)
 
+    if group:
+        flushed.append(max(group, key=lambda e: len(e["fragment"])))
 
-def _buffer_generated(event: dict, ts: datetime, pending: list[tuple[dict, datetime]], state: _SessionState) -> None:
-    """
-    Buffer a generated edit, flushing the previous group first if the burst window has elapsed.
-
-    Generated edits arriving within BURST_GROUP_WINDOW of each other are treated
-    as one burst; a longer gap means a new burst has started.
-    """
-    if pending:
-        gap = ts - pending[-1][1]
-        if gap > BURST_GROUP_WINDOW:
-            _flush_generated_group(pending, state)
-
-    pending.append((event, ts))
-
-
-def _handle_typed_edit(event: dict, ts: datetime, state: _SessionState) -> None:
-    """
-    Apply a normal character-by-character edit (not flagged as generated).
-    """
-    _apply_edit_bookkeeping(event, ts, state, is_generated=False)
+    return flushed
 
 
 def _finalize_snapshots(state: _SessionState) -> None:
@@ -349,43 +315,57 @@ def _finalize_snapshots(state: _SessionState) -> None:
     if last is None or last["after_idx"] != len(state.events) - 1:
         snapshot = {
             "after_idx": len(state.events) - 1,
-            "document_text": state.matcher.document,
+            "document_text": state.document,
         }
         state.snapshots.append(snapshot)
 
 
-def _classify_burst_kind(event: dict, is_internal: bool, approved_fragment_string: str | None) -> str:
+def _classify_burst(
+        event: dict,
+        ts: datetime,
+        matchers: Sequence[DocumentMatcher],
+        approved_pastes: str | None,
+) -> str:
     """
     Bucket a generated edit into one of four burst kinds.
 
     Precedence:
-        - "ide_action":        Matches a known IDE-completion pattern (see `_is_ide_action`).
-        - "approved paste":    Fragment appears in the approved-fragments file.
-        - "internal paste":    Fragment was previously present in this or an additional recording.
-        - "unapproved paste":  Everything else.
+        - "ide_action":       Matches a known IDE-completion pattern (see `_is_ide_action`).
+        - "approved paste":   Fragment appears in the approved-fragments file.
+        - "internal paste":   Fragment was previously present in this or an overlapping recording.
+        - "unapproved paste": Everything else.
+
+    IDE actions are checked first so that an IDE-emitted stub like
+    `def main():\\n    ` isn't misclassified as an internal paste just because
+    it's a prefix of an earlier IDE emission like `def main():\\n    pass`.
     """
+    fragment = event.get("newFragment", "")
+
     if _is_ide_action(event):
         return "ide_action"
 
-    fragment = event.get("newFragment", "")
-    if approved_fragment_string and normalize_newlines(fragment) in approved_fragment_string:
+    if _is_approved_paste(event, approved_pastes):
         return "approved paste"
 
-    if is_internal:
+    if _is_internal_paste(fragment, ts, matchers):
         return "internal paste"
 
     return "unapproved paste"
 
 
-def _build_bursts(state: _SessionState, internal_flags: Sequence[bool], approved_fragment_string: str | None) -> None:
+def _build_bursts(
+        state: _SessionState,
+        matchers: Sequence[DocumentMatcher],
+        approved_pastes: str | None,
+) -> None:
     """
     Turn each buffered generated entry into a Burst plus a matching timeline entry.
 
-    Runs after the matcher has resolved which fragments were "internal" (previously
-    seen in some recording), so each burst can be classified with full context.
+    Runs after the session has walked through all the events in a recording, so each
+    burst can be classified with full context — including cross-recording matcher lookups.
     """
-    for entry, is_internal in zip(state.generated_entries, internal_flags):
-        kind = _classify_burst_kind(entry["event"], is_internal, approved_fragment_string)
+    for entry in state.generated_entries:
+        kind = _classify_burst(entry["event"], entry["timestamp"], matchers, approved_pastes)
         state.bursts.append(Burst(
             kind=kind,
             timestamp=entry["timestamp"],
@@ -404,7 +384,7 @@ def _build_bursts(state: _SessionState, internal_flags: Sequence[bool], approved
         })
 
 
-def _compute_burst_totals(bursts: list[Burst]) -> dict[str, int]:
+def _count_bursts(bursts: list[Burst]) -> dict[str, int]:
     """
     Count bursts by kind, returning a dict keyed by every possible burst kind (zero-filled).
     """
@@ -428,7 +408,7 @@ def _build_session(state: _SessionState) -> Session:
     else:
         total_time = 0.0
 
-    totals = _compute_burst_totals(state.bursts)
+    totals = _count_bursts(state.bursts)
 
     return {
         "document": state.document_name,
@@ -452,73 +432,66 @@ def _build_session(state: _SessionState) -> Session:
     }
 
 
-def analyze_inputs(
-        inputs: list[dict],
-        extras: Sequence[DocumentMatcher] = (),
-        approved_fragment_string: str | None = None,
+def analyze_events(
+        events: list[dict],
+        matchers: Sequence[DocumentMatcher] = (),
+        approved_pastes: str | None = None,
 ) -> Session:
     """
     Walk a sequence of recording events and return a fully-populated Session.
 
     Pipeline:
-        - Replay each event, tracking idle gaps and focus intervals.
-        - Buffer "generated" edits into burst groups, flushing on gap or typed-edit boundary.
-        - Finalize the suffix-array matcher and resolve which generated fragments are "internal"
-          (i.e. came from history — this recording or one of the extras).
-        - Classify each generated burst (ide_action / approved / internal / unapproved paste).
+        - Replay each event, tracking idle gaps and focus intervals, and recording
+          every generated edit into state.generated_entries.
+        - Collapse adjacent generated entries within BURST_GROUP_WINDOW into single
+          bursts (so PyCharm-style multi-edit completions register once, not N times).
+        - Classify each burst (ide_action / approved / internal / unapproved paste),
+          querying every matcher in `matchers` for cross-recording internal-paste detection.
         - Assemble the Session dict with totals, snapshots, and a sorted timeline.
     """
     state = _SessionState()
-    pending: list[tuple[dict, datetime]] = []
 
-    for event in inputs:
+    for event in events:
         ts = parse_ts(event["timestamp"])
         _record_idle_gap(state, ts)
         kind = _event_kind(event)
 
-        if kind == "edit" and _is_generated_edit(event):
-            _buffer_generated(event, ts, pending, state)
-            continue
-
-        _flush_generated_group(pending, state)
-
         if kind == "focusStatus":
             _handle_focus(event, ts, state)
         elif kind == "edit":
-            _handle_typed_edit(event, ts, state)
+            _apply_edit(event, ts, state, _is_generated_edit(event))
 
-    _flush_generated_group(pending, state)
     _finalize_snapshots(state)
+    state.generated_entries = _collapse_groups(state.generated_entries, BURST_GROUP_WINDOW)
 
-    state.matcher.finalize()
-    internal_flags = state.matcher.resolve(extras)
-    _build_bursts(state, internal_flags, approved_fragment_string)
+    _build_bursts(state, matchers, approved_pastes)
     state.timeline.sort(key=lambda e: e["timestamp"])
 
     return _build_session(state)
 
 
-def load_session(recording_files: Path, approved_fragments_path: Path | None, excluded_file_types: list[str],
-                 additional_recordings: Path | list[Path] | None) -> Session:
+def load_sessions(
+        recording_files: list[Path],
+        approved_pastes_path: Path | None,
+        excluded_file_types: list[str],
+) -> list[Session]:
     """
-    Analyze a recording with optional filters and additional context, returning a Session object with the results.
+    Load and analyze every recording matched by `recording_files`, one Session each.
 
-    Usage:
-        - recording_file: Path to the main .jsonl or .jsonl.gz recording to analyze.
-        - additional_recordings: Optional list of paths or a directory containing additional
-          .jsonl.gz recordings to include in the analysis for more context. The main recording_file
-          is automatically excluded if present.
+    Pipeline:
+        - Load the approved-pastes file (if any).
+        - Expand the input paths (files and/or globs) into (path, events) pairs.
+        - Build one DocumentMatcher per recording up front, so each session's
+          internal-paste check can search across the whole batch.
+        - Analyze each recording, passing the full matcher list in.
     """
-    approved_fragments = _load_approved_fragments(approved_fragments_path)
-    inputs = load_recording(recording_files, excluded_file_types)
+    approved_pastes = _load_approved_pastes(approved_pastes_path)
 
-    additional_inputs = [
-        load_recording(recording, excluded_file_types)
-        for recording in _resolve_additional(additional_recordings, recording_files)
+    recordings = load_recordings(recording_files, excluded_file_types)
+
+    matchers = [build_matcher(events) for _, events in recordings]
+
+    return [
+        analyze_events(events, matchers, approved_pastes)
+        for _, events in recordings
     ]
-
-    additional_sessions = []
-    for additional_input in additional_inputs:
-        additional_sessions.append(_build_suffix_array(additional_input))
-
-    return analyze_inputs(inputs, additional_sessions, approved_fragments)

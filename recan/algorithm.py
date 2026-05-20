@@ -1,43 +1,42 @@
 """
-DocumentMatcher — "was this fragment ever in the document before time T?"
+DocumentMatcher — searchable index over a document's full edit history.
 
-After every edit we append the full post-edit document to a growing
-bytearray, separated by a NUL SENTINEL, then build a suffix array over it.
-Substring search becomes O(F log B); a parallel (snapshot_end, timestamp)
-index converts a wall-clock cutoff into a byte cutoff via bisect.
+After every edit, the full post-edit document is appended to a growing
+bytearray, separated by a NUL SENTINEL. After finalize(), a suffix array is
+built over that corpus and `contains(fragment, ts)` answers
+"did this fragment appear anywhere in the document strictly before `ts`?".
+
+Cross-recording matching is just `any(m.contains(...) for m in matchers)` —
+each matcher independently resolves the timestamp to its own byte cutoff via
+its `_snapshot_times` index.
 
 Complexity (E edits, D avg doc size, B = corpus ≈ E·D, F fragment len):
   apply_edit  O(D) time / O(D) corpus growth
   finalize    O(B) time and space (suffix array)
-  _contains   O(F log B + matches)
-  resolve     sums _contains over queued checks × matchers consulted
+  contains    O(F log B + matches)
 
 Corpus grows as O(E·D), so this assumes one student / one file / one sitting.
 """
 
 import bisect
 from datetime import datetime
-from typing import Sequence
 
 from pydivsufsort import divsufsort, sa_search
 
+from recan.utils import parse_ts, splice
+
 
 class DocumentMatcher:
-    """Tracks the live document and the full history of its states, then
-    answers "did this fragment ever appear in the document before this point
-    in wall-clock time?"
-
-    The gate is a *timestamp*, not a byte offset, so multiple matchers (one
-    per recording) can be queried against each other — each matcher resolves
-    the timestamp to its own byte cutoff via a parallel index.
+    """
+    Build a searchable index over a document's full history and answer
+    "was this fragment in the document strictly before this timestamp?".
 
     Use:
         m = DocumentMatcher()
-        for edit in events:
-            m.apply_edit(offset, old, new, is_generated=..., ts=edit_ts)
+        for edit in edits:
+            m.apply_edit(offset, old, new, ts=edit_ts)
         m.finalize()
-        flags = m.resolve()              # self-only
-        flags = m.resolve([other, ...])  # cross-recording
+        m.contains(fragment, ts)
     """
 
     # NUL byte. Used as a snapshot separator inside `_history_bytes` so that
@@ -54,9 +53,6 @@ class DocumentMatcher:
         # This is the searchable corpus the suffix array is built over.
         self._history_bytes: bytearray = bytearray()
 
-        # Queued (fragment, ts) pairs from generated edits, answered by resolve().
-        self._pending_checks: list[tuple[str, datetime]] = []
-
         # Parallel arrays mapping snapshot index -> (end-byte-offset, timestamp).
         # `_snapshot_ends[i]` is len(_history_bytes) after appending snapshot i
         # plus its trailing sentinel — i.e. the exclusive upper bound of snapshot i.
@@ -66,55 +62,56 @@ class DocumentMatcher:
         # The suffix array over `_history_bytes`. Populated by finalize().
         self._sa = None
 
-    def _before_pos_at(self, ts: datetime) -> int:
-        """
-        Return the exclusive byte cutoff in `_history_bytes` corresponding to `ts`:
-        only corpus positions strictly less than this cutoff happened before `ts`.
+    @property
+    def document(self) -> str:
+        """The current live document text, reflecting every edit applied so far."""
+        return self._document
 
-        Uses bisect_left so that a ts equal to a snapshot's timestamp returns
-        the end of the PRIOR snapshot, not that snapshot's own end. This is
-        what prevents self-capture: every queued check inherits the timestamp
-        of the edit that created it, and that edit's snapshot is the very
-        place its fragment trivially appears. Excluding it means we only
-        report a match when the fragment also lived in some earlier snapshot.
-        A ts earlier than every snapshot returns 0.
+    def apply_edit(
+            self,
+            offset: int,
+            old_fragment: str,
+            new_fragment: str,
+            ts: datetime,
+    ) -> None:
         """
-        # bisect_left returns the leftmost index i where _snapshot_times[i] >= ts.
-        # Stepping back one gives the latest snapshot whose timestamp is strictly
-        # less than ts — i.e. the snapshot that came BEFORE the edit we're querying.
-        i = bisect.bisect_left(self._snapshot_times, ts) - 1
-        return self._snapshot_ends[i] if i >= 0 else 0
+        Apply an edit to the live document and append the post-edit state to history.
 
-    def _find_match_positions(self, needle: bytes) -> Sequence[int]:
+        Updates:
+            - live `_document` (splice in `new_fragment` at `offset`)
+            - `_history_bytes` (append the full post-edit doc + SENTINEL)
+            - `_snapshot_ends` / `_snapshot_times` (so a wall-clock ts can later
+              be resolved to a byte cutoff)
         """
-        Return all starting byte positions where `needle` occurs in the corpus.
+        self._document = splice(self._document, offset, old_fragment, new_fragment)
 
-        Wraps pydivsufsort.sa_search, which returns (count, sa_offset) — a
-        contiguous slice of the suffix array whose entries are the matching
-        positions. Returns an empty list when there are no matches; otherwise
-        returns a numpy view into `self._sa`, so callers should use len()
-        rather than truth-testing the result directly.
-        """
-        count, sa_offset = sa_search(self._history_bytes, self._sa, needle)
-        if count == 0:
-            # sa_offset is None when count is 0 — guard before slicing _sa.
-            return []
-        return self._sa[sa_offset: sa_offset + count]
+        # Append the new full document state to the corpus, terminated by SENTINEL.
+        # We snapshot the WHOLE document (not just the diff) so the suffix array
+        # can answer "did this substring ever exist anywhere in the document?"
+        # without having to reconstruct intermediate states.
+        self._history_bytes.extend(self._document.encode("utf-8"))
+        self._history_bytes.append(self.SENTINEL)
 
-    def _contains(self, fragment: str, ts: datetime) -> bool:
+        self._snapshot_ends.append(len(self._history_bytes))
+        self._snapshot_times.append(ts)
+
+    def finalize(self) -> None:
+        """Build the suffix array over the concatenated history. Required before contains()."""
+        self._sa = divsufsort(self._history_bytes)
+
+    def contains(self, fragment: str, ts: datetime) -> bool:
         """
-        Has `fragment` appeared anywhere in the document at any moment before `ts`?
+        Has `fragment` appeared anywhere in the document strictly before `ts`?
 
         Steps:
-            1. Convert `ts` to a byte cutoff in the corpus.
-            2. Find every position where `fragment` occurs in the corpus.
-            3. Return True iff at least one occurrence ends at or before the cutoff
-               (i.e. lies entirely inside a snapshot that was already recorded by `ts`).
+            - Convert `ts` to a byte cutoff in the corpus.
+            - Find every position where `fragment` occurs in the corpus.
+            - Return True iff at least one occurrence ends at or before the cutoff
+              (i.e. lies entirely inside a snapshot that was already recorded by `ts`).
         """
         if self._sa is None:
             raise RuntimeError(
-                "DocumentMatcher._contains called before finalize(); "
-                "all matchers (including extras) must be finalize()-d before resolve()."
+                "DocumentMatcher.contains called before finalize()."
             )
 
         # Empty fragment is never a meaningful match.
@@ -140,72 +137,64 @@ class DocumentMatcher:
         needle_len = len(needle)
         return any(int(p) + needle_len <= cutoff for p in positions)
 
-    @property
-    def document(self) -> str:
+    def _before_pos_at(self, ts: datetime) -> int:
         """
-        The current live document text, reflecting every edit applied so far.
+        Return the exclusive byte cutoff in `_history_bytes` corresponding to `ts`:
+        only corpus positions strictly less than this cutoff happened before `ts`.
+
+        Uses bisect_left so that a ts equal to a snapshot's timestamp returns
+        the end of the PRIOR snapshot, not that snapshot's own end. This is
+        what prevents self-capture: a generated edit's fragment trivially
+        appears in the snapshot that edit produced, so excluding it means we
+        only report a match when the fragment also lived in some earlier
+        snapshot. A ts earlier than every snapshot returns 0.
         """
-        return self._document
+        # bisect_left returns the leftmost index i where _snapshot_times[i] >= ts.
+        # Stepping back one gives the latest snapshot whose timestamp is strictly
+        # less than ts — i.e. the snapshot that came BEFORE the edit we're querying.
+        i = bisect.bisect_left(self._snapshot_times, ts) - 1
+        return self._snapshot_ends[i] if i >= 0 else 0
 
-    def apply_edit(
-            self,
-            offset: int,
-            old_fragment: str,
-            new_fragment: str,
-            is_generated: bool,
-            ts: datetime,
-    ) -> None:
+    def _find_match_positions(self, needle: bytes):
         """
-        Apply an edit to the live document and append the post-edit state to history.
+        Return all starting byte positions where `needle` occurs in the corpus.
 
-        Generated edits also queue a pending "did this exist before `ts`?" check,
-        to be answered later by `resolve()` once every matcher has been finalized.
+        Wraps pydivsufsort.sa_search, which returns (count, sa_offset) — a
+        contiguous slice of the suffix array whose entries are the matching
+        positions. Returns an empty list when there are no matches; otherwise
+        returns a numpy view into `self._sa`, so callers should use len()
+        rather than truth-testing the result directly.
         """
-        # Queue the lookup now; we can't answer it yet because future edits
-        # (and other matchers' edits) still need to be folded into the corpus.
-        if is_generated:
-            self._pending_checks.append((new_fragment, ts))
+        count, sa_offset = sa_search(self._history_bytes, self._sa, needle)
+        if count == 0:
+            # sa_offset is None when count is 0 — guard before slicing _sa.
+            return []
+        return self._sa[sa_offset: sa_offset + count]
 
-        # Splice the edit into the live document: keep everything before
-        # `offset`, drop the `len(old_fragment)` characters that were there,
-        # and insert `new_fragment` in their place.
-        before_edit = self._document[:offset]
-        after_edit = self._document[offset + len(old_fragment):]
-        self._document = before_edit + new_fragment + after_edit
 
-        # Append the new full document state to the corpus, terminated by SENTINEL.
-        # We snapshot the WHOLE document (not just the diff) so the suffix array
-        # can answer "did this substring ever exist anywhere in the document?"
-        # without having to reconstruct intermediate states.
-        self._history_bytes.extend(self._document.encode("utf-8"))
-        self._history_bytes.append(self.SENTINEL)
+def build_matcher(events: list[dict]) -> DocumentMatcher:
+    """
+    Build and finalize a DocumentMatcher from a recording's event stream.
 
-        # Index this snapshot's end-byte and timestamp so _before_pos_at can
-        # later convert a wall-clock cutoff into a byte cutoff.
-        self._snapshot_ends.append(len(self._history_bytes))
-        self._snapshot_times.append(ts)
+    Skips non-edit events (focusStatus etc.) and uses each edit's timestamp so
+    later cross-matcher queries can be resolved by wall-clock time.
 
-    def finalize(self) -> None:
-        """
-        Build the suffix array over the concatenated history.
+    Usage: load_sessions() builds one matcher per recording and passes the
+    whole list into analyze_events(), which uses them to classify generated
+    edits as internal pastes (matches in this recording or any overlapping one).
+    """
+    matcher = DocumentMatcher()
 
-        Must be called before resolve(). All matchers participating in a
-        cross-recording resolve() — both `self` and every entry in `extras` —
-        must have been finalize()-d first.
-        """
-        self._sa = divsufsort(self._history_bytes)
+    for event in events:
+        if "newFragment" not in event:
+            continue
 
-    def resolve(self, extras: Sequence["DocumentMatcher"] = ()) -> list[bool]:
-        """
-        Answer each queued generated edit with True/False: did this fragment
-        exist in some document state before its timestamp, either in this
-        matcher's history or in any of the given extra matchers?
+        matcher.apply_edit(
+            offset=event.get("offset", 0),
+            old_fragment=event.get("oldFragment", ""),
+            new_fragment=event["newFragment"],
+            ts=parse_ts(event["timestamp"]),
+        )
 
-        Order of the returned list matches the order edits were queued via
-        apply_edit(..., is_generated=True).
-        """
-        return [
-            self._contains(fragment, ts)
-            or any(extra._contains(fragment, ts) for extra in extras)
-            for fragment, ts in self._pending_checks
-        ]
+    matcher.finalize()
+    return matcher

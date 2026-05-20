@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from recan.structure import Session
-from recan.session import load_session
+from recan.session import load_sessions
 
 log = logging.getLogger(__name__)
 
@@ -121,13 +121,13 @@ def generate_stat_csvs(folder: Path, output_path: Path,
                     excluded_count += 1
                     continue
 
-            session = load_session(recording, approved_fragments_path, excluded_file_types, additional_recordings=submission)
+            sessions = load_sessions([recording], approved_fragments_path, excluded_file_types)
 
             student_id, student_email = submission_student_map.get(submission.name, (None, None))
 
-            stats.append(_row_from_session(problem, submission, session, student_id, student_email))
-
-            processed += 1
+            for session in sessions:
+                stats.append(_row_from_session(problem, submission, session, student_id, student_email))
+                processed += 1
 
     write_csv(output_path, stats)
 

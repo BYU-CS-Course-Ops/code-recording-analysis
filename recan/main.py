@@ -6,7 +6,7 @@ from argparse import ArgumentParser, Namespace
 from .formaters import render_json, render_markdown
 from .viewer import write_player_html
 from .stats import generate_stat_csvs
-from .session import load_session
+from .session import load_sessions
 from .utils import is_gradescope_export, generate_submission_student_map, generate_problem_set
 
 
@@ -23,12 +23,12 @@ def add_common(sp: ArgumentParser) -> None:
 
 
 def _handle_summary(args: Namespace) -> None:
-    session = load_session(args.recording_files, args.approved_pastes, args.exclude, args.additional_recordings)
+    sessions = load_sessions(args.recording_files, args.approved_pastes, args.exclude)
 
     if args.json:
-        content = render_json(session)
+        content = render_json(sessions)
     else:
-        content = render_markdown(session)
+        content = render_markdown(sessions)
 
     if args.output:
         args.output.write_text(content, encoding="utf-8")
@@ -41,20 +41,18 @@ def _parse_summary(subparsers):
     Generate a summary of a recording, either as human-readable Markdown or structured JSON.
 
     Usage: `recan summary
-                <recording_file(s)>                                           - Required
+                <recording_file(s)>                                          - Required
                 [--exclude .ext1 .ext2 ...]                                  - Optional
                 [--approved-pastes approved.txt]                             - Optional
-                [--additional-recordings add1.jsonl.gz add2.jsonl.gz ...]    - Optional
                 [--output summary.md]                                        - Optional
                 [--json]`                                                    - Optional
     """
     summary = subparsers.add_parser("summary", help="Analyze a recording and print or write a JSON/Markdown summary.")
 
-    summary.add_argument("recording_files", type=Path, help="Path to the recording file(s) (JSONL or gzipped JSONL).")
+    summary.add_argument("recording_files", type=Path, nargs="+", help="One or more recording files or glob patterns (JSONL or gzipped JSONL).")
 
     add_common(summary)
 
-    summary.add_argument("--additional-recordings", nargs="*", type=Path, default=None, help="Additional .jsonl.gz recordings to include. Accepts a folder (all .jsonl.gz files inside), a list of files, or omit. The primary recording_file is skipped if present.")
     summary.add_argument("--output", type=Path, help="Path to write the summary (defaults to stdout).")
     summary.add_argument("--json", action="store_true", help="Output as JSON instead of human-readable Markdown.")
 
@@ -62,9 +60,10 @@ def _parse_summary(subparsers):
 
 
 def _handle_view(args: Namespace) -> None:
-    session = load_session(args.recording_files, args.approved_pastes, args.exclude, args.additional_recordings)
+    sessions = load_sessions(args.recording_files, args.approved_pastes, args.exclude)
+    session = sessions[0]
 
-    html_path = write_player_html(session, args.recording_files)
+    html_path = write_player_html(session, args.recording_files[0])
 
     if args.auto_open:
         webbrowser.open(html_path.resolve().as_uri())
@@ -78,16 +77,14 @@ def _parse_view(subparsers):
                 <recording_file(s)>                                          - Required
                 [--exclude .ext1 .ext2 ...]                                  - Optional
                 [--approved-pastes approved.txt]                             - Optional
-                [--additional-recordings add1.jsonl.gz add2.jsonl.gz ...]    - Optional
                 [--auto-open]`                                               - Optional (defaults to true)
     """
     view = subparsers.add_parser("view", help="Generate a self-contained HTML player for a recording.")
 
-    view.add_argument("recording_files", type=Path, help="Path to the recording file(s) (JSONL or gzipped JSONL).")
+    view.add_argument("recording_files", type=Path, nargs="+", help="One or more recording files or glob patterns (JSONL or gzipped JSONL).")
 
     add_common(view)
 
-    view.add_argument("--additional-recordings", nargs="*", type=Path, default=None, help="Additional .jsonl.gz recordings to include. Accepts a folder (all .jsonl.gz files inside), a list of files, or omit. The primary recording_file is skipped if present.")
     view.add_argument("--auto-open", action="store_true", default=True, help="Open the generated HTML in the default web browser (default: true).")
 
     view.set_defaults(func=_handle_view)
