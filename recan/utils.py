@@ -111,7 +111,8 @@ def _load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
         with opener(path, "rt") as f:
             events = [json.loads(line) for line in f]
     except (gzip.BadGzipFile, zlib.error, json.JSONDecodeError, OSError) as e:
-        raise RuntimeError(f"Failed to read recording {path}: {type(e).__name__}: {e}") from e
+        print(f"Error reading {path}: {e}")
+        return []
 
     # Remove the first event if the old and new fragments are identical
     # Reflects the state of the document at the start of the recording.
@@ -128,7 +129,22 @@ def _load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
     ]
 
 
-def load_recordings(paths: list[Path], excluded_file_types: list[str]) -> list[tuple[Path, list[dict]]]:
+def _is_problem(recording: Path, problems: set[str]) -> bool:
+    """
+    Check if the recording's document matches any of the specified problems.
+
+    If problems is empty, returns True for all recordings.
+    """
+    if not problems:
+        return True
+
+    name = recording.name.split('.')[0]
+
+    return any(p == name for p in problems)
+
+
+
+def load_recordings(paths: list[Path], problems: Path, excluded_file_types: list[str]) -> list[tuple[Path, list[dict]]]:
     """
     Expand the given paths (files and/or glob patterns) and load each recording,
     returning a list of (recording_path, events) tuples.
@@ -139,7 +155,12 @@ def load_recordings(paths: list[Path], excluded_file_types: list[str]) -> list[t
     for recording in recordings:
         inputs.append((recording, _load_recording(recording, excluded_file_types)))
 
-    return inputs
+    problem_set = generate_problem_set(problems)
+
+    return [
+        (recording, events) for recording, events in inputs
+        if _is_problem(recording, problem_set)
+    ]
 
 
 def splice(doc: str, offset: int, old: str, new: str) -> str:

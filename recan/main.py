@@ -17,13 +17,15 @@ def add_common(sp: ArgumentParser) -> None:
     Arguments:
         - `--exclude .ext1 .ext2 ...`: List of file extensions to exclude (e.g. ".html" ".md").
         - `--approved-pastes approved.txt`: Path to a file containing all approved fragments.
+        - `--problems problems.yaml`: YAML file specifying which problems to include, e.g. by name. If omitted, includes all problems in the folder.
     """
     sp.add_argument("--exclude", nargs="*", default=[], help="List of file extensions to exclude (e.g. .html .md).")
     sp.add_argument("--approved-pastes", type=Path, help="Path to a file containing all approved fragments. E.g. given blocks of code")
+    sp.add_argument("--problems", help="yaml file specifying which problems to include, e.g. by name. If omitted, includes all problems in the folder.")
 
 
 def _handle_summary(args: Namespace) -> None:
-    sessions = load_sessions(args.recording_files, args.approved_pastes, args.exclude)
+    sessions = load_sessions(args.recording_files, args.problems, args.approved_pastes, args.exclude)
 
     if args.json:
         content = render_json(sessions)
@@ -60,10 +62,9 @@ def _parse_summary(subparsers):
 
 
 def _handle_view(args: Namespace) -> None:
-    sessions = load_sessions(args.recording_files, args.approved_pastes, args.exclude)
-    session = sessions[0]
+    sessions = load_sessions(args.recording_files, args.problems, args.approved_pastes, args.exclude)
 
-    html_path = write_player_html(session, args.recording_files[0])
+    html_path = write_player_html(sessions, args.recording_files[0])
 
     if args.auto_open:
         webbrowser.open(html_path.resolve().as_uri())
@@ -91,19 +92,13 @@ def _parse_view(subparsers):
 
 
 def _handle_stats(args: Namespace) -> None:
-    raise NotImplementedError("The `stats` command is not yet implemented. This will be added in a future release.")
-
     if not is_gradescope_export(args.folder):
         logging.error("Error: The specified folder does not appear to be a Gradescope export. Please check the folder structure and try again.")
         return
 
     submission_student_map = generate_submission_student_map(args.folder)
 
-    problems = {}
-    if args.problems:
-        problems = generate_problem_set(args.problems)
-
-    generate_stat_csvs(Path(args.folder), Path(args.output), problems, args.exclude, args.approved_pastes, submission_student_map)
+    generate_stat_csvs(Path(args.folder), Path(args.output), args.problems, args.exclude, args.approved_pastes, submission_student_map)
 
 
 def _parse_stats(subparsers):
@@ -123,8 +118,6 @@ def _parse_stats(subparsers):
     stats.add_argument("output", type=Path, help="Path to write the generated CSV file")
 
     add_common(stats)
-
-    stats.add_argument("--problems", help="yaml file specifying which problems to include, e.g. by name. If omitted, includes all problems in the folder.")
 
     stats.set_defaults(func=_handle_stats)
 
