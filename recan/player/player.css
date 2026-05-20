@@ -275,13 +275,25 @@ button { font: inherit; color: inherit; }
 
 .editor-summary {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   padding: 10px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   font-size: 12px;
-  flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
+}
+
+/* Chips wrap freely inside their own container so the banner can stay
+   pinned to the right edge without being pushed off-screen when the row
+   gets long. */
+.es-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .es-chip {
@@ -391,9 +403,11 @@ button { font: inherit; color: inherit; }
 }
 
 .burst-banner {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+  /* Sits at the right edge of the editor-summary chip row as a fixed-width
+     sibling to the chips container (which flexes to fill remaining space).
+     flex-shrink:0 + white-space:nowrap ensure the banner never wraps or
+     shrinks below its content size, even when the chips container is full. */
+  flex-shrink: 0;
   background: var(--burst);
   color: #fff;
   font-size: 11px;
@@ -406,6 +420,7 @@ button { font: inherit; color: inherit; }
   display: none;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
   --pulse-rgb: var(--burst-rgb);
   animation: pulseDot 1.2s ease-in-out infinite;
 }
@@ -488,6 +503,221 @@ button { font: inherit; color: inherit; }
   color: var(--fg-muted);
 }
 
+/* session-switch overlay — shown when the playhead is between two sessions'
+   activity (an inter-session lull). Looks like the unfocused overlay but
+   keyed in --idle so it reads as "thinking / switching context" rather than
+   "distracted". */
+.session-switch-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--bg) 78%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.session-switch-overlay[hidden] { display: none; }
+
+.session-switch-card {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+  padding: 18px 24px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 280px;
+  text-align: center;
+}
+.session-switch-card .label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--idle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.session-switch-card .label::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--idle);
+  box-shadow: 0 0 0 4px var(--idle-soft);
+}
+.session-switch-card .ss-files {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--fg);
+}
+.session-switch-card .ss-file {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-switch-card .ss-arrow {
+  width: 16px;
+  height: 16px;
+  color: var(--fg-subtle);
+  flex-shrink: 0;
+}
+.session-switch-card .elapsed {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.session-switch-card .hint {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+/* ===================== Tab strip (IDE-style) ===================== */
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  min-height: 36px;
+  flex-shrink: 0;
+}
+.tab-strip::-webkit-scrollbar { height: 6px; }
+.tab-strip::-webkit-scrollbar-track { background: transparent; }
+.tab-strip::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+.tab-strip[hidden] { display: none; }
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 12px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 100ms ease, color 100ms ease;
+  font-weight: 500;
+  /* Hairline indicator strip at the top — invisible on inactive tabs. */
+  border-top: 2px solid transparent;
+  /* Negative offset so the inactive-tab border-top doesn't push baselines. */
+  margin-top: -1px;
+}
+.tab:hover {
+  background: color-mix(in oklab, var(--panel) 60%, transparent);
+  color: var(--fg);
+}
+.tab.active {
+  background: var(--bg);
+  color: var(--fg);
+  border-top-color: var(--accent);
+  /* The active tab visually "owns" the editor below it — paint over the
+     border-bottom of the strip so there's no seam between tab and editor. */
+  box-shadow: 0 1px 0 0 var(--bg);
+}
+.tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--bg);
+}
+
+.tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: var(--fg-subtle);
+  opacity: 0.8;
+}
+.tab-dot.lang-python    { background: #3776AB; }
+.tab-dot.lang-javascript,
+.tab-dot.lang-typescript { background: #F7DF1E; }
+.tab-dot.lang-java      { background: #B07219; }
+.tab-dot.lang-go        { background: #00ADD8; }
+.tab-dot.lang-rust      { background: #DEA584; }
+.tab-dot.lang-c,
+.tab-dot.lang-cpp       { background: #00599C; }
+.tab-dot.lang-html      { background: #E34F26; }
+.tab-dot.lang-css       { background: #1572B6; }
+.tab-dot.lang-markdown  { background: var(--fg-subtle); }
+
+.tab-name {
+  font-weight: 600;
+}
+.tab-meta {
+  font-size: 10.5px;
+  color: var(--fg-subtle);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+/* burst pip — shows next to filename if this session has any pastes / IDE
+   actions, so reviewers can scan the strip for "which tab needs attention".
+   Sized small so it doesn't dominate the tab. */
+.tab-pip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+}
+.tab-pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fg-subtle);
+}
+.tab-pip.ide-action       { background: var(--ide-action); }
+.tab-pip.approved-paste   { background: var(--approved); }
+.tab-pip.internal-paste   { background: var(--internal); }
+.tab-pip.unapproved-paste { background: var(--unapproved); }
+
+/* When playback auto-switches us into a tab, briefly outline it so the
+   viewer's eye snaps to the new active document. The animation re-fires by
+   toggling the class. */
+.tab.switch-flash {
+  animation: tab-switch-flash 700ms ease-out;
+}
+@keyframes tab-switch-flash {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft), 0 1px 0 0 var(--bg); background: var(--accent-soft); }
+  40%  { box-shadow: 0 0 0 6px transparent, 0 1px 0 0 var(--bg); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 1px 0 0 var(--bg); background: var(--bg); }
+}
+
+/* Single-session players: hide the strip entirely so the layout collapses to
+   the pre-multidoc look. */
+.tab-strip.single-session { display: none; }
+
 /* ===================== Timeline ===================== */
 .timeline {
   background: var(--panel);
@@ -564,6 +794,49 @@ button { font: inherit; color: inherit; }
 .tick-burst.internal-paste {
   background: var(--internal);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--internal) 25%, transparent);
+}
+
+/* Session boundary — a vertical divider on the timeline marking the moment
+   the active document changed (or, with a wide gap, the moment activity
+   resumed in a different doc). Sits on top of the lull segment so reviewers
+   can pinpoint "tab switched here". */
+.tick-session {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--fg);
+  opacity: 0.55;
+  border-radius: 1px;
+  z-index: 2;
+}
+.tick-session::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background: var(--fg);
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+/* Inter-session lull — visually the same family as .seg-idle but a touch
+   stronger so it reads as "context switch" not just "thinking". */
+.seg-session-lull {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--idle-soft),
+    var(--idle-soft) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  opacity: 0.9;
 }
 
 .playhead {
@@ -979,6 +1252,55 @@ button { font: inherit; color: inherit; }
   background: var(--panel);
 }
 
+/* Documents list in stats sidebar — one row per session. Mirrors the .tab
+   look so reviewers map "row in sidebar ↔ tab in editor" at a glance. */
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--fg);
+  font-size: 12px;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.session-row:hover {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+}
+.session-row .session-row-dot { width: 8px; height: 8px; flex-shrink: 0; }
+.session-row-name {
+  flex: 1;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-row-meta {
+  font-size: 11px;
+  color: var(--fg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Document hint inside timeline tooltip (rendered as " · file.py"). */
+.timeline-tooltip .tt-doc {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--fg-subtle);
+  font-weight: 500;
+  font-size: 10px;
+}
+
 .flag {
   display: flex;
   gap: 8px;
@@ -1072,45 +1394,6 @@ button { font: inherit; color: inherit; }
   text-underline-offset: 3px;
 }
 
-/* Live edit highlight — paints a colored rectangle over each fragment as it
-   appears during playback, then fades over ~1s. Uses a sibling overlay rather
-   than the CSS Highlights API so individual rects can fade independently and
-   coexist with the click-driven burst highlights above. */
-.edit-highlight-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-.eh-rect {
-  position: absolute;
-  border-radius: 2px;
-  will-change: opacity;
-}
-.eh-rect.eh-edit {
-  background: rgba(var(--ok-rgb), 0.18);
-  box-shadow: inset 0 -2px 0 0 var(--ok);
-}
-.eh-rect.eh-approved-paste {
-  background: rgba(var(--approved-rgb), 0.18);
-  box-shadow: inset 0 -2px 0 0 var(--approved);
-}
-.eh-rect.eh-unapproved-paste {
-  background: rgba(var(--unapproved-rgb), 0.18);
-  box-shadow: inset 0 -2px 0 0 var(--unapproved);
-}
-.eh-rect.eh-internal-paste {
-  background: rgba(var(--internal-rgb), 0.18);
-  box-shadow: inset 0 -2px 0 0 var(--internal);
-}
-.eh-rect.eh-ide-action {
-  background: rgba(var(--ide-action-rgb), 0.18);
-  box-shadow: inset 0 -2px 0 0 var(--ide-action);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
@@ -1154,3 +1437,4 @@ button { font: inherit; color: inherit; }
 .hljs-deletion         { color: var(--hl-builtin); }
 .hljs-emphasis         { font-style: italic; }
 .hljs-strong           { font-weight: 700; }
+
