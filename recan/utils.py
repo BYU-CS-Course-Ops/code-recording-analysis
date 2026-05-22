@@ -3,6 +3,7 @@ import zlib
 import yaml
 import json
 
+from glob import glob
 from pathlib import Path
 from datetime import datetime
 
@@ -66,7 +67,38 @@ def language_from_extension(document: str) -> str:
     }.get(ext, "plaintext")
 
 
-def load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
+def _get_recordings(paths: list[Path]) -> list[Path]:
+    """
+    Expand a list of file paths and/or glob patterns into a sorted, deduplicated
+    list of recording files.
+
+    Each entry may be:
+        - an existing file (kept as-is)
+        - a glob pattern (expanded against the filesystem)
+
+    Useful for CLI invocations where the shell may pre-expand a glob into many
+    args, or pass a single unexpanded pattern.
+    """
+    seen: set[Path] = set()
+    out: list[Path] = []
+
+    for path in paths:
+        if path.is_file():
+            candidates = [path]
+        else:
+            candidates = [Path(p) for p in glob(str(path)) if Path(p).is_file()]
+
+        for c in candidates:
+            resolved = c.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            out.append(c)
+
+    return sorted(out)
+
+
+def _load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
     """
     Load a .jsonl or .jsonl.gz recording and drop events for excluded file types.
 
@@ -79,7 +111,8 @@ def load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
         with opener(path, "rt") as f:
             events = [json.loads(line) for line in f]
     except (gzip.BadGzipFile, zlib.error, json.JSONDecodeError, OSError) as e:
-        raise RuntimeError(f"Failed to read recording {path}: {type(e).__name__}: {e}") from e
+        print(f"Error reading {path}: {e}")
+        return []
 
     # Remove the first event if the old and new fragments are identical
     # Reflects the state of the document at the start of the recording.
@@ -94,6 +127,47 @@ def load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
         e for e in events
         if not any(e.get("document", "").endswith(ext) for ext in excluded_file_types)
     ]
+
+
+def _is_problem(recording: Path, problems: set[str]) -> bool:
+    """
+    Check if the recording's document matches any of the specified problems.
+
+    If problems is empty, returns True for all recordings.
+    """
+    if not problems:
+        return True
+
+    name = recording.name.split('.')[0]
+
+    return any(p == name for p in problems)
+
+
+
+def load_recordings(paths: list[Path], problems: Path, excluded_file_types: list[str]) -> list[tuple[Path, list[dict]]]:
+    """
+    Expand the given paths (files and/or glob patterns) and load each recording,
+    returning a list of (recording_path, events) tuples.
+    """
+    recordings = _get_recordings(paths)
+
+    inputs = []
+    for recording in recordings:
+        inputs.append((recording, _load_recording(recording, excluded_file_types)))
+
+    problem_set = generate_problem_set(problems)
+
+    return [
+        (recording, events) for recording, events in inputs
+        if _is_problem(recording, problem_set)
+    ]
+
+
+def splice(doc: str, offset: int, old: str, new: str) -> str:
+    """Replace `old` at `offset` in `doc` with `new`, returning the rewritten doc."""
+    before_edit = doc[:offset]
+    after_edit = doc[offset + len(old):]
+    return before_edit + new + after_edit
 
 
 def normalize_newlines(text, target='\n') -> str:

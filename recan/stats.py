@@ -1,10 +1,10 @@
 import csv
 import logging
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from recan.structure import Session
-from recan.session import load_session
+from recan.session import load_sessions
 
 log = logging.getLogger(__name__)
 
@@ -48,11 +48,7 @@ def get_submissions(folder: Path) -> list[Path]:
     ]
 
 
-def get_recordings(submission: Path) -> list[Path]:
-    return list(submission.glob('*.jsonl.gz'))
-
-
-def _row_from_session(problem, submission, session_info: Session, student_id, student_email) -> dict:
+def _row_from_session(submission, session_info: Session, student_id, student_email) -> dict:
     total_time = session_info['total_time']
     time_unfocused = session_info['total_time_unfocused']
     snapshots = session_info['snapshots']
@@ -60,7 +56,7 @@ def _row_from_session(problem, submission, session_info: Session, student_id, st
     return {
         'assignment': submission.parent.name,
         'submission': submission.name,
-        'problem': problem,
+        'problem': PureWindowsPath(session_info['document']).name,
         'student_id': student_id,
         'student_email': student_email,
         'start_time': session_info['start_time'],
@@ -104,7 +100,7 @@ def _log_summary(processed: int, excluded: int, unreadable: list[tuple[Path, str
 
 
 def generate_stat_csvs(folder: Path, output_path: Path,
-                       problems: set[str] | None, excluded_file_types: list[str],
+                       problems: Path, excluded_file_types: list[str],
                        approved_fragments_path: Path | None,
                        submission_student_map: dict[str, tuple[int, str]]) -> None:
     stats: list[dict] = []
@@ -113,20 +109,15 @@ def generate_stat_csvs(folder: Path, output_path: Path,
     processed = 0
 
     for submission in get_submissions(folder):
-        for recording in get_recordings(submission):
-            problem = recording.name.split('.')[0]
 
-            if problems:
-                if not problem in problems:
-                    excluded_count += 1
-                    continue
+        recordings = Path(submission) / '*.jsonl.gz'
 
-            session = load_session(recording, approved_fragments_path, excluded_file_types, additional_recordings=submission)
+        sessions = load_sessions([recordings], problems, approved_fragments_path, excluded_file_types)
 
-            student_id, student_email = submission_student_map.get(submission.name, (None, None))
+        student_id, student_email = submission_student_map.get(submission.name, (None, None))
 
-            stats.append(_row_from_session(problem, submission, session, student_id, student_email))
-
+        for session in sessions:
+            stats.append(_row_from_session(submission, session, student_id, student_email))
             processed += 1
 
     write_csv(output_path, stats)

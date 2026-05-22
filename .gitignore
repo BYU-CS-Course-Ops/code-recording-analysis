@@ -17,13 +17,17 @@ poetry.lock
 /samples/
 *.csv
 
+
 # Agentic
 .claude/
 .codex/
 .superpowers/
 docs/
 .playwright-cli
+CLAUDE.md
+claude-design
 
 # Samples
 *.gz
 *.jsonl
+*.md

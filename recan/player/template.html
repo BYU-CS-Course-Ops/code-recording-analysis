@@ -58,25 +58,45 @@
     </header>
 
     <section class="editor-wrap" id="editor-wrap">
-      <div class="editor-summary" id="editor-summary">
-        <span class="es-chip"><span>Edits</span><strong id="sum-edits">0</strong></span>
-        <span class="es-chip ide-action"><span class="swatch"></span><span>IDE actions</span><strong id="sum-ide-actions">0</strong></span>
-        <span class="es-chip approved-paste"><span class="swatch"></span><span>Approved pastes</span><strong id="sum-approved-pastes">0</strong></span>
-        <span class="es-chip internal-paste"><span class="swatch"></span><span>Internal pastes</span><strong id="sum-internal-pastes">0</strong></span>
-        <span class="es-chip unapproved-paste"><span class="swatch"></span><span>Unapproved pastes</span><strong id="sum-unapproved-pastes">0</strong></span>
-        <span class="es-chip unfocused"><span class="swatch"></span><span>Unfocused</span><strong id="sum-unfocused">0</strong></span>
-        <span class="es-chip idle"><span class="swatch"></span><span>Idle gaps</span><strong id="sum-idle">0</strong></span>
+      <div class="tab-strip" id="tab-strip" role="tablist" aria-label="Session documents">
+        <!-- Filled by JS — one .tab per session, ordered chronologically. -->
       </div>
 
-      <pre class="editor" id="editor"><div class="line-gutter" id="line-gutter">1</div><code id="editor-code" class="language-plaintext"></code><div class="edit-highlight-layer" id="edit-highlight-layer" aria-hidden="true"></div></pre>
+      <div class="editor-summary" id="editor-summary">
+        <div class="es-chips" id="es-chips">
+          <span class="es-chip"><span>Edits</span><strong id="sum-edits">0</strong></span>
+          <span class="es-chip ide-action"><span class="swatch"></span><span>IDE actions</span><strong id="sum-ide-actions">0</strong></span>
+          <span class="es-chip approved-paste"><span class="swatch"></span><span>Approved pastes</span><strong id="sum-approved-pastes">0</strong></span>
+          <span class="es-chip internal-paste"><span class="swatch"></span><span>Internal pastes</span><strong id="sum-internal-pastes">0</strong></span>
+          <span class="es-chip unapproved-paste"><span class="swatch"></span><span>Unapproved pastes</span><strong id="sum-unapproved-pastes">0</strong></span>
+          <span class="es-chip unfocused"><span class="swatch"></span><span>Unfocused</span><strong id="sum-unfocused">0</strong></span>
+          <span class="es-chip idle"><span class="swatch"></span><span>Idle gaps</span><strong id="sum-idle">0</strong></span>
+        </div>
+        <div class="burst-banner" id="burst-banner"><span id="burst-banner-text">Event</span></div>
+      </div>
 
-      <div class="burst-banner" id="burst-banner"><span id="burst-banner-text">Event</span></div>
+      <div class="editor-area" id="editor-area">
+        <pre class="editor" id="editor"><div class="line-gutter" id="line-gutter">1</div><code id="editor-code" class="language-plaintext"></code></pre>
 
-      <div class="unfocused-overlay" id="unfocused-overlay" hidden>
-        <div class="unfocused-card">
-          <div class="label">Window unfocused</div>
-          <div class="elapsed" id="unfocused-elapsed">0:00</div>
-          <div class="hint">Student switched away from the editor</div>
+        <div class="unfocused-overlay" id="unfocused-overlay" hidden>
+          <div class="unfocused-card">
+            <div class="label">Window unfocused</div>
+            <div class="elapsed" id="unfocused-elapsed">0:00</div>
+            <div class="hint">Student switched away from the editor</div>
+          </div>
+        </div>
+
+        <div class="session-switch-overlay" id="session-switch-overlay" hidden>
+          <div class="session-switch-card">
+            <div class="label">Between documents</div>
+            <div class="ss-files">
+              <span class="ss-file" id="ss-from">—</span>
+              <svg class="ss-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+              <span class="ss-file" id="ss-to">—</span>
+            </div>
+            <div class="elapsed" id="ss-elapsed">0:00</div>
+            <div class="hint">Lull between sessions</div>
+          </div>
         </div>
       </div>
     </section>
