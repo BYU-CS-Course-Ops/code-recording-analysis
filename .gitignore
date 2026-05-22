@@ -30,3 +30,4 @@ claude-design
 # Samples
 *.gz
 *.jsonl
+*.md
