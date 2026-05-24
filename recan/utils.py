@@ -117,7 +117,7 @@ def _load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
     # Remove the first event if the old and new fragments are identical
     # Reflects the state of the document at the start of the recording.
     first_event = events[0]
-    if first_event.get("oldFragment") == first_event["newFragment"]:
+    if first_event.get("oldFragment") == first_event.get("newFragment"):
         events.remove(first_event)
 
     if not excluded_file_types:
