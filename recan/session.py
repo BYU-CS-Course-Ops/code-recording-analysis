@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
 from recan.algorithm import DocumentMatcher, build_matcher
@@ -267,8 +267,12 @@ def _apply_edit(event: dict, state: _SessionState) -> None:
     offset = event.get("offset", 0)
     doc = event.get("document", "")
 
-    if state.document_name == "" and doc:
-        state.document_name = doc
+    if not state.document_name:
+        # Get the stem of the document path as the document name, need to handle both windows and unix paths
+        document_name = PureWindowsPath(doc).name
+        document_name = Path(document_name).stem
+        state.document_name = document_name
+
 
     state.document = splice(state.document, offset, old_fragment, new_fragment)
 

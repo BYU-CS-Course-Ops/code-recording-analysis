@@ -1,6 +1,6 @@
 {%- set paste_entries = session.timeline | selectattr("kind", "equalto", "unapproved paste") | list -%}
 
-# `{{ session.document or "(unknown document)" }}`
+# **{{ session.document or "(unknown document)" }}**
 
 |              |                                           |
 |--------------|-------------------------------------------|
@@ -32,8 +32,7 @@
 
 ### {{ format_ts(entry.timestamp) }}
 
-`{{ entry.line_count }} line{{ "s" if entry.line_count != 1 else "" }}` ·
-`{{ entry.char_count }} char{{ "s" if entry.char_count != 1 else "" }}`
+`{{ entry.line_count }} line{{ "s" if entry.line_count != 1 else "" }}` — `{{ entry.char_count }} char{{ "s" if entry.char_count != 1 else "" }}`
 
 ```{{ session.language }}
 {{ entry.fragment }}
@@ -41,3 +40,5 @@
 
 {% endfor -%}
 {%- endif %}
+
+---
