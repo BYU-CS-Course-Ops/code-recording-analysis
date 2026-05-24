@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from textwrap import dedent
 
 import jinja2
 
@@ -27,7 +26,6 @@ def _render_one_markdown(session: Session, template: jinja2.Template) -> str:
         format_ts=format_ts,
         format_duration=format_duration,
         len=len,
-        dedent=dedent,
     )
 
 

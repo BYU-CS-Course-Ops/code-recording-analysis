@@ -1,39 +1,43 @@
-**Document:** `{{ session.document or "(unknown)" }}`
+{%- set paste_entries = session.timeline | selectattr("kind", "equalto", "unapproved paste") | list -%}
 
-**Recording Started:** {{ format_ts(session.start_time) }}
+# `{{ session.document or "(unknown document)" }}`
 
-## Executive Summary
+|              |                                           |
+|--------------|-------------------------------------------|
+| **Started**  | {{ format_ts(session.start_time) }}       |
+| **Ended**    | {{ format_ts(session.end_time) }}         |
+| **Duration** | {{ format_duration(session.total_time) }} |
+| **Language** | {{ session.language }}                    |
 
-| Metric            | Value                                                                    |
-|-------------------|--------------------------------------------------------------------------|
-| Total Time        | {{ format_duration(session.total_time) }}                                |
-| Time Focused      | {{ format_duration(session.total_time - session.total_time_unfocused) }} |
-| Time Unfocused    | {{ format_duration(session.total_time_unfocused) }}                      |
-| Focus Events      | {{ len(session.focus_intervals) }}                                       |
-| IDE Actions       | {{ session.total_ide_actions }}                                          |
-| Unapproved Pastes | {{ session.total_unapproved_pastes }}                                    |
-| Approved Pastes   | {{ session.total_approved_pastes }}                                      |
-| Edits             | {{ session.edit_count }}                                                 |
+## Summary
 
-## Timeline
+| Metric                | Count                                               |
+|-----------------------|-----------------------------------------------------|
+| Edits                 | {{ session.total_edits }}                           |
+| Focus events          | {{ len(session.focus_intervals) }}                  |
+| Time unfocused        | {{ format_duration(session.total_time_unfocused) }} |
+| IDE actions           | {{ session.total_ide_actions }}                     |
+| Approved pastes       | {{ session.total_approved_pastes }}                 |
+| Internal pastes       | {{ session.total_internal_pastes }}                 |
+| **Unapproved pastes** | **{{ session.total_unapproved_pastes }}**           |
 
-{% if session.timeline and len(session.timeline) < 20 -%}
-{% for entry in session.timeline -%}
-{% if entry.kind != "focus" -%}
+## Unapproved pastes
 
-- **{{ format_ts(entry.timestamp) }}** — {{ entry.kind | title }} ({{ entry.line_count }} lines, {{ entry.char_count }} chars)
+{% if not paste_entries -%}
+*No unapproved pastes recorded.*
+{%- elif len(paste_entries) >= 20 -%}
+*Timeline omitted — {{ len(paste_entries) }} unapproved pastes exceeds threshold of 20.*
+{%- else -%}
+{% for entry in paste_entries %}
+
+### {{ format_ts(entry.timestamp) }}
+
+`{{ entry.line_count }} line{{ "s" if entry.line_count != 1 else "" }}` ·
+`{{ entry.char_count }} char{{ "s" if entry.char_count != 1 else "" }}`
 
 ```{{ session.language }}
-
-{{ dedent(entry.fragment) }}
-
+{{ entry.fragment }}
 ```
 
-{% endif -%}
-{% endfor %}
-{%- elif session.timeline -%}
-*(timeline omitted — {{ len(session.timeline) }} events exceeds threshold of 20)*
-{%- else -%}
-
-*(no notable timeline entries)*
+{% endfor -%}
 {%- endif %}
