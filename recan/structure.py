@@ -82,8 +82,13 @@ class Session(TypedDict):
     end_time: datetime
     total_time: float
     total_time_unfocused: float
+    total_time_typing: float
 
     total_edits: int
+    total_chars: int
+    total_typed_chars: int
+    total_pasted_chars: int
+    total_deleted_chars: int
     total_unapproved_pastes: int
     total_approved_pastes: int
     total_internal_pastes: int

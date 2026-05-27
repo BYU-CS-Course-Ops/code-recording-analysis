@@ -25,13 +25,18 @@ CSV_COLUMNS = [
     'num_approved_pastes',
     'num_internal_pastes',
     'num_edits',
-    'num_chars'
+    'num_chars',
+    'num_typed_chars',
+    'num_pasted_chars',
+    'num_deleted_chars',
+    'time_typing',
 ]
 
 NUMERIC_COLUMNS = [
     'total_time',
     'time_focused',
     'time_unfocused',
+    'time_typing',
     'num_unfocused_events',
     'num_ide_actions',
     'num_unapproved_pastes',
@@ -39,6 +44,9 @@ NUMERIC_COLUMNS = [
     'num_internal_pastes',
     'num_edits',
     'num_chars',
+    'num_typed_chars',
+    'num_pasted_chars',
+    'num_deleted_chars',
 ]
 
 
@@ -51,8 +59,6 @@ def get_submissions(folder: Path) -> list[Path]:
 def _row_from_session(submission, session_info: Session, student_id, student_email) -> dict:
     total_time = session_info['total_time']
     time_unfocused = session_info['total_time_unfocused']
-    snapshots = session_info['snapshots']
-    final_doc = snapshots[-1]['document_text'] if snapshots else ''
     return {
         'assignment': submission.parent.name,
         'submission': submission.name,
@@ -64,13 +70,17 @@ def _row_from_session(submission, session_info: Session, student_id, student_ema
         'total_time': total_time,
         'time_focused': total_time - time_unfocused,
         'time_unfocused': time_unfocused,
+        'time_typing': session_info['total_time_typing'],
         'num_unfocused_events': len(session_info['focus_intervals']),
         'num_ide_actions': session_info['total_ide_actions'],
         'num_unapproved_pastes': session_info['total_unapproved_pastes'],
         'num_approved_pastes': session_info['total_approved_pastes'],
         'num_internal_pastes': session_info['total_internal_pastes'],
         'num_edits': session_info['total_edits'],
-        'num_chars': len(final_doc)
+        'num_chars': session_info['total_chars'],
+        'num_typed_chars': session_info['total_typed_chars'],
+        'num_pasted_chars': session_info['total_pasted_chars'],
+        'num_deleted_chars': session_info['total_deleted_chars'],
     }
 
 

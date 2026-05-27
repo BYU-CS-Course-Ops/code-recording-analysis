@@ -68,7 +68,13 @@ class _SessionState:
     start_time: datetime | None = None
     end_time: datetime | None = None
     total_time_unfocused: float = 0.0
+    total_time_typing: float = 0.0
+    total_pasted_chars: int = 0
     edit_count: int = 0
+    total_typing_chars: int = 0
+    total_deleted_chars: int = 0
+    last_typed_ts: datetime | None = None
+    focused: bool = True
 
 
 def _event_kind(event: dict) -> str:
@@ -231,6 +237,8 @@ def _handle_focus(event: dict, ts: datetime, state: _SessionState) -> None:
     if focused is False and state.blur_idx is None:
         state.blur_idx = len(state.events) - 1
         state.blur_ts = ts
+        state.focused = False
+        state.last_typed_ts = None
     elif focused is True and state.blur_idx is not None:
         duration = (ts - state.blur_ts).total_seconds()
         state.total_time_unfocused += duration
@@ -251,15 +259,34 @@ def _handle_focus(event: dict, ts: datetime, state: _SessionState) -> None:
 
         state.blur_idx = None
         state.blur_ts = None
+        state.focused = True
 
 
-def _apply_edit(event: dict, state: _SessionState) -> None:
+def _accum_typing_time(state: _SessionState, ts: datetime, is_generated: bool) -> None:
+    """
+    Accumulate elapsed time between consecutive typed (non-generated) edits while focused.
+
+    Resets the clock on generated edits or when the editor is blurred, so
+    paste/IDE-action time and unfocused time are excluded.
+    """
+    if is_generated or not state.focused:
+        state.last_typed_ts = None
+        return
+
+    if state.last_typed_ts is not None:
+        state.total_time_typing += (ts - state.last_typed_ts).total_seconds()
+
+    state.last_typed_ts = ts
+
+
+def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
     """
     Apply a single edit to state.document and record it in the session's bookkeeping.
 
     Updates:
         - state.document (splice in the new fragment so snapshots stay current)
         - the canonical events list and edit_count
+        - total_pasted_chars (accumulated from generated edits)
         - periodic snapshots (every SNAPSHOT_INTERVAL_EVENTS edits, for timeline scrubbing)
     """
     old_fragment = event.get("oldFragment", "")
@@ -293,6 +320,12 @@ def _apply_edit(event: dict, state: _SessionState) -> None:
             "document_text": state.document,
         })
 
+    state.total_deleted_chars += len(old_fragment)
+
+    if is_generated:
+        state.total_pasted_chars += len(new_fragment)
+    else:
+        state.total_typing_chars += len(new_fragment)
 
 def _extend_cluster(state: _SessionState, event: dict, ts: datetime, is_generated: bool) -> None:
     """
@@ -448,7 +481,12 @@ def _build_session(state: _SessionState) -> Session:
         "end_time": state.end_time,
         "total_time": total_time,
         "total_time_unfocused": state.total_time_unfocused,
+        "total_time_typing": state.total_time_typing,
         "total_edits": state.edit_count,
+        "total_chars": len(state.document),
+        "total_typed_chars": state.total_typing_chars,
+        "total_pasted_chars": state.total_pasted_chars,
+        "total_deleted_chars": state.total_deleted_chars,
         "total_unapproved_pastes": totals["unapproved paste"],
         "total_approved_pastes": totals["approved paste"],
         "total_internal_pastes": totals["internal paste"],
@@ -502,8 +540,10 @@ def analyze_events(
         if not state.cluster.is_empty and (ts - state.cluster.last_ts) > BURST_CLUSTER_WINDOW:
             _flush_cluster(state, matchers, approved_pastes)
 
-        _apply_edit(event, state)
-        _extend_cluster(state, event, ts, _is_generated_edit(event))
+        is_generated = _is_generated_edit(event)
+        _accum_typing_time(state, ts, is_generated)
+        _apply_edit(event, state, is_generated)
+        _extend_cluster(state, event, ts, is_generated)
 
     _flush_cluster(state, matchers, approved_pastes)
     _finalize_snapshots(state)
