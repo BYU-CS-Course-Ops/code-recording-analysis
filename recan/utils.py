@@ -35,7 +35,7 @@ def format_duration(seconds: float) -> str:
 
 
 def format_ts(ts: datetime) -> str:
-    return ts.strftime("%Y-%m-%d %H:%M:%S")
+    return ts.strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
 
 def language_from_extension(document: str) -> str:
