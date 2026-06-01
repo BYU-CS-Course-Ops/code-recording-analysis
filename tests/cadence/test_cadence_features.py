@@ -187,3 +187,28 @@ def test_generate_cadence_features_one_row_per_submission(tmp_path):
         ("submission_111", "analyze_logs", "999"),
         ("submission_222", "remove_frequent", "888"),
     }
+
+
+def test_features_subcommand_parses(tmp_path):
+    parser = gcg._build_parser()
+    args = parser.parse_args(["features", str(tmp_path), str(tmp_path / "out")])
+    assert args.func is gcg._handle_features
+    assert args.folder == tmp_path
+    assert args.output == tmp_path / "out"
+
+
+def test_graphs_subcommand_still_parses(tmp_path):
+    parser = gcg._build_parser()
+    args = parser.parse_args(["graphs", str(tmp_path), str(tmp_path / "out")])
+    assert args.func is gcg._handle_graphs
+
+
+def test_common_options_present_on_features(tmp_path):
+    parser = gcg._build_parser()
+    args = parser.parse_args(
+        ["features", str(tmp_path), str(tmp_path / "out"),
+         "--exclude", ".md", ".html",
+         "--approved-pastes", str(tmp_path / "frags.txt")]
+    )
+    assert args.exclude == [".md", ".html"]
+    assert args.approved_pastes == tmp_path / "frags.txt"
