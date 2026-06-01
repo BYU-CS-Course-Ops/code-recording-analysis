@@ -66,3 +66,46 @@ def test_burst_runs_all_idle_is_empty():
 
 def test_burst_runs_all_active_is_single_run():
     assert gcg._burst_runs(np.array([True, True, True])) == [3]
+
+
+def test_returns_exactly_the_feature_columns():
+    feats = gcg._cadence_features([_edit(_t(0)), _edit(_t(10))])
+    assert set(feats) == set(gcg.CADENCE_FEATURE_COLUMNS)
+    assert len(gcg.CADENCE_FEATURE_COLUMNS) == 11
+
+
+def test_zero_edits_all_zero():
+    feats = gcg._cadence_features([_focus(_t(0), True)])
+    assert all(v == 0.0 for v in feats.values())
+
+
+def test_single_edit_zeros_gap_features():
+    feats = gcg._cadence_features([_edit(_t(0), new="hello")])
+    # Gap-derived features are 0 with <2 edits ...
+    for col in ("mean_gap", "median_gap", "burstiness", "gap_cv", "longest_pause"):
+        assert feats[col] == 0.0
+    # ... but bin-derived features follow their formulas on the single active bin.
+    assert feats["num_bursts"] == 1.0
+    assert feats["active_bin_frac"] == 1.0
+    assert feats["activity_centroid"] == 0.0
+    # single active bin: max == mean, so the ratio is 1
+    assert feats["peak_to_mean"] == 1.0
+
+
+def test_bursty_session_more_bursty_than_steady():
+    steady = [_edit(_t(i * 10)) for i in range(11)]            # uniform 10s gaps
+    bursty = [_edit(_t(t)) for t in (0, 1, 2, 3, 90, 91, 92)]  # tight clusters + long gap
+    assert gcg._cadence_features(bursty)["burstiness"] > gcg._cadence_features(steady)["burstiness"]
+
+
+def test_front_loaded_centroid_less_than_back_loaded():
+    front = [_edit(_t(t), new="x" * 50) for t in (0, 5, 10, 15)] + [_edit(_t(120), new="x")]
+    back = [_edit(_t(0), new="x")] + [_edit(_t(t), new="x" * 50) for t in (105, 110, 115, 120)]
+    assert (gcg._cadence_features(front)["activity_centroid"]
+            < gcg._cadence_features(back)["activity_centroid"])
+
+
+def test_edit_rate_is_edits_per_active_minute():
+    # 3 edits in one 30s bin -> 1 active bin -> 0.5 active min -> 3 / 0.5 == 6.0
+    feats = gcg._cadence_features([_edit(_t(0)), _edit(_t(1)), _edit(_t(2))])
+    assert feats["edit_rate"] == 6.0
