@@ -273,6 +273,19 @@ button { font: inherit; color: inherit; }
   min-height: 0;
 }
 
+/* The editor-area is the flex child that fills the remaining height under the
+   tab strip + summary row. It must be allowed to SHRINK (min-height:0) so its
+   own scroll container (.editor) can take over vertical overflow instead of
+   the whole column growing and clipping under overflow:hidden. It also serves
+   as the positioning context for the unfocused / session-switch overlays. */
+.editor-area {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .editor-summary {
   display: flex;
   gap: 8px;
@@ -339,7 +352,8 @@ button { font: inherit; color: inherit; }
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 12.5px;
   line-height: 1.55;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;       /* allow the grid to shrink so overflow:auto can scroll */
   overflow: auto;
   white-space: pre;
   position: relative;

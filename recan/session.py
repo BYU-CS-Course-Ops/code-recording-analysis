@@ -476,7 +476,7 @@ def _build_session(state: _SessionState) -> Session:
 
     return {
         "document": state.document_name,
-        "language": language_from_extension(state.document_name),
+        "language": language_from_extension(state.document_name, state.document),
         "start_time": state.start_time,
         "end_time": state.end_time,
         "total_time": total_time,

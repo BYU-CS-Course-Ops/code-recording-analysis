@@ -1,4 +1,5 @@
 import gzip
+import re
 import zlib
 import yaml
 import json
@@ -38,12 +39,17 @@ def format_ts(ts: datetime) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
 
-def language_from_extension(document: str) -> str:
+def language_from_extension(document: str, content: str | None = None) -> str:
     """
-    Map document filename to a highlight.js language name.
+    Map a document filename to a highlight.js language name.
+
+    Primarily keys off the file extension. When the document name has no
+    extension (or an unknown one) and ``content`` is supplied, fall back to a
+    lightweight content sniff so extension-less recordings (e.g. "analyze_logs")
+    still get syntax highlighting instead of silently rendering as plaintext.
     """
     ext = Path(document).suffix.lower()
-    return {
+    lang = {
         ".py": "python",
         ".js": "javascript",
         ".jsx": "javascript",
@@ -64,7 +70,44 @@ def language_from_extension(document: str) -> str:
         ".html": "xml",
         ".xml": "xml",
         ".css": "css",
-    }.get(ext, "plaintext")
+    }.get(ext)
+
+    if lang:
+        return lang
+    if content:
+        return language_from_content(content)
+    return "plaintext"
+
+
+def language_from_content(content: str) -> str:
+    """
+    Best-effort language guess from a source snippet, used when the document
+    name carries no usable extension. Deliberately conservative: it only
+    returns a concrete language on a clear signal, otherwise "plaintext".
+    """
+    sample = content[:4000]
+    if not sample.strip():
+        return "plaintext"
+
+    # Python — imports, defs, classes, or the __main__ guard.
+    if re.search(r"^\s*(?:import \w|from \w[\w.]* import |def \w+\s*\(|class \w+\s*[:\(]|@\w)", sample, re.M) \
+            or re.search(r"__name__\s*==\s*['\"]__main__['\"]", sample):
+        return "python"
+
+    # C / C++ — preprocessor includes (check before generic braces).
+    if re.search(r"^\s*#\s*include\s*[<\"]", sample, re.M):
+        return "cpp" if re.search(r"std::|template\s*<|::|\bclass\b", sample) else "c"
+
+    # JavaScript / TypeScript — declarations or arrow functions.
+    if re.search(r"\b(?:function|const|let|var)\b|=>", sample) and ";" in sample:
+        return "typescript" if re.search(r":\s*(?:string|number|boolean|any)\b|\binterface\b", sample) else "javascript"
+
+    # JSON — a single top-level object/array.
+    stripped = sample.strip()
+    if stripped[:1] in "{[" and re.search(r'"\w+"\s*:', sample):
+        return "json"
+
+    return "plaintext"
 
 
 def _get_recordings(paths: list[Path]) -> list[Path]:

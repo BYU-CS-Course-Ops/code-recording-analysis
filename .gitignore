@@ -13,11 +13,6 @@ poetry.lock
 # OS
 .DS_Store
 
-# Project
-/samples/
-*.csv
-
-
 # Agentic
 .claude/
 .codex/
@@ -32,3 +27,5 @@ claude-design
 *.jsonl
 *.md
 w26-final-analysis/
+/samples/
+*.csv

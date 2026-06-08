@@ -460,18 +460,84 @@ function langTabDotClass(lang) {
 }
 
 /* =========================================================================
+   Language resolution
+   -------------------------------------------------------------------------
+   The bundle carries a `language` per session, derived upstream from the
+   document's file extension. Recordings whose document name has NO extension
+   (e.g. "analyze_logs") fall through to "plaintext", which kills syntax
+   highlighting even when the contents are obviously code.
+
+   Here we recover gracefully: if the declared language is missing, "plaintext",
+   or not a grammar highlight.js actually has, we auto-detect once from the
+   richest text sample we have and cache the result on the session. Detection
+   runs a single time per session (not every playback frame).
+   ========================================================================= */
+
+// Languages we let auto-detect choose from — the grammars bundled in
+// highlight.min.js. Constraining the set makes detection faster and avoids
+// spurious matches against exotic grammars.
+const AUTODETECT_LANGS = [
+  "python", "javascript", "typescript", "java", "cpp", "c", "go", "rust",
+  "json", "xml", "css", "bash", "markdown",
+];
+
+function bestSampleText(session) {
+  // Snapshots hold full document text at various points; the longest is the
+  // most representative. Fall back to the live doc if there are no snapshots.
+  let best = session.doc || "";
+  for (const sn of (session.snapshots || [])) {
+    const t = sn && sn.document_text;
+    if (t && t.length > best.length) best = t;
+  }
+  return best;
+}
+
+function resolveSessionLanguage(session) {
+  if (session._resolvedLang) return session._resolvedLang;
+
+  let lang = session.language || "plaintext";
+  const hl = window.hljs;
+  const known = hl && hl.getLanguage && hl.getLanguage(lang);
+
+  if (hl && hl.highlightAuto && (lang === "plaintext" || !known)) {
+    const sample = bestSampleText(session);
+    if (sample && sample.trim()) {
+      try {
+        const r = hl.highlightAuto(sample, AUTODETECT_LANGS);
+        if (r && r.language && r.relevance > 0) lang = r.language;
+      } catch (e) { /* keep declared lang */ }
+    }
+  }
+
+  session._resolvedLang = lang;
+  return lang;
+}
+
+/* =========================================================================
    Editor + topbar render
    ========================================================================= */
 
 function renderEditor() {
   const session = STATE.sessions[STATE.activeIdx];
   const codeEl = $("editor-code");
-  codeEl.textContent = session?.doc || "";
-  codeEl.className = "language-" + (session?.language || "plaintext");
-  if (window.hljs && window.hljs.highlightElement) {
-    delete codeEl.dataset.highlighted;
-    try { window.hljs.highlightElement(codeEl); } catch (e) { /* noop */ }
+  const text = session?.doc || "";
+  const lang = session ? resolveSessionLanguage(session) : "plaintext";
+
+  // Highlight by writing tokenized HTML directly (rather than
+  // hljs.highlightElement, which first stomps textContent and tracks a
+  // `data-highlighted` guard that we'd have to keep clearing every frame).
+  // We always know the language at this point — either from the bundle or
+  // auto-detected once in resolveSessionLanguage — so use hljs.highlight.
+  if (window.hljs && window.hljs.getLanguage && window.hljs.getLanguage(lang)) {
+    try {
+      codeEl.innerHTML = window.hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+    } catch (e) {
+      codeEl.textContent = text;
+    }
+  } else {
+    codeEl.textContent = text;
   }
+  codeEl.className = "hljs language-" + lang;
   renderLineGutter();
 }
 
@@ -492,7 +558,7 @@ function renderTopbar() {
   const f = $("filename");
   f.textContent = basename(full);
   f.title = full;
-  $("lang-pill").textContent = session?.language || "plaintext";
+  $("lang-pill").textContent = session ? resolveSessionLanguage(session) : "plaintext";
 }
 
 /* =========================================================================
@@ -518,7 +584,7 @@ function renderTabStrip() {
     tab.title = s.document;
 
     const dot = document.createElement("span");
-    dot.className = "tab-dot " + langTabDotClass(s.language);
+    dot.className = "tab-dot " + langTabDotClass(resolveSessionLanguage(s));
     tab.appendChild(dot);
 
     const name = document.createElement("span");
@@ -649,7 +715,7 @@ function renderStatsSidebar() {
                 + s.total_internal_pastes + s.total_unapproved_pastes;
     return `
       <button class="session-row" data-session="${i}" title="${s.document.replace(/"/g, "&quot;")}">
-        <span class="session-row-dot tab-dot ${langTabDotClass(s.language)}"></span>
+        <span class="session-row-dot tab-dot ${langTabDotClass(resolveSessionLanguage(s))}"></span>
         <span class="session-row-name">${n}</span>
         <span class="session-row-meta">${fmtDuration(s.total_time || 0)}${flags ? ` · ${flags} flag${flags === 1 ? "" : "s"}` : ""}</span>
       </button>`;
