@@ -52,6 +52,7 @@ function normalizeLegacy(b) {
   return normalizeSession({
     document: m.document,
     language: m.language,
+    initial_document: b.initial_document || "",
     start_time: m.start_time,
     end_time: m.end_time,
     total_time: s.total_seconds,
@@ -73,6 +74,7 @@ function normalizeSession(s) {
   const session = {
     document:               s.document               || "(unnamed)",
     language:               s.language               || "plaintext",
+    initial_document:       s.initial_document       || "",
     start_time:             s.start_time,
     end_time:               s.end_time,
     total_time:             s.total_time             ?? 0,
@@ -87,8 +89,8 @@ function normalizeSession(s) {
     idle_gaps:              s.idle_gaps              || [],
     focus_intervals:        s.focus_intervals        || [],
     snapshots:              s.snapshots              || [],
-    // Live per-session reconstructed document. Empty until we apply events.
-    doc: "",
+    // Live per-session reconstructed document, seeded from the recorder snapshot.
+    doc: s.initial_document || "",
     docCursor: -1,    // largest local idx whose edit has been applied to `doc`
   };
   growBurstsByTimeProximity(session);
@@ -291,10 +293,16 @@ function buildGlobalState(rawSessions) {
     unfocused_seconds: 0, total_seconds: 0,
   });
 
-  // Overall meta. Range = first event → last event across all sessions.
+  // Overall meta includes initial snapshots that predate the first real edit.
+  const sessionStarts = sessions.map(s => Date.parse(s.start_time)).filter(Number.isFinite);
+  const sessionEnds = sessions.map(s => Date.parse(s.end_time)).filter(Number.isFinite);
   const meta = {
-    start_time: globalEvents[0]?.timestamp || sessions[0]?.start_time,
-    end_time:   globalEvents[globalEvents.length - 1]?.timestamp || sessions[sessions.length - 1]?.end_time,
+    start_time: sessionStarts.length
+      ? new Date(Math.min(...sessionStarts)).toISOString()
+      : globalEvents[0]?.timestamp,
+    end_time: sessionEnds.length
+      ? new Date(Math.max(...sessionEnds)).toISOString()
+      : globalEvents[globalEvents.length - 1]?.timestamp,
     documents:  sessions.map(s => s.document),
   };
 
@@ -361,11 +369,11 @@ function findSnapshotAtOrBefore(session, localTargetIdx) {
 // Rebuild a single session's doc state to the given LOCAL target idx
 // (idx === -1 means "before any events of this session").
 function rebuildSessionTo(session, localTargetIdx) {
-  if (localTargetIdx < 0) { session.doc = ""; session.docCursor = -1; return; }
+  if (localTargetIdx < 0) { session.doc = session.initial_document; session.docCursor = -1; return; }
   const snap = findSnapshotAtOrBefore(session, localTargetIdx);
   let doc, cursor;
   if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-  else      { doc = ""; cursor = -1; }
+  else      { doc = session.initial_document; cursor = -1; }
   for (let i = cursor + 1; i <= localTargetIdx; i++) {
     const ev = session.events[i];
     if (ev?.type === "edit") {
@@ -377,8 +385,8 @@ function rebuildSessionTo(session, localTargetIdx) {
 }
 
 // Given a global playhead position, rebuild EVERY session's doc to reflect
-// the latest event from that session that has fired so far. Sessions whose
-// first event hasn't fired yet end up empty.
+// the latest event from that session that has fired so far. Before a
+// session's first edit, its initial snapshot is shown.
 function rebuildAllSessionsToGlobalIdx(globalIdx) {
   // For each session, find the largest localIdx whose globalIdx <= target.
   // localToGlobal[si] is monotonic-ish (a session's events appear in time
@@ -973,11 +981,11 @@ function computeBurstApex(burst) {
   const first = session.events[burst.localStart];
   if (!first) return null;
 
-  let doc = "";
+  let doc = session.initial_document;
   const snap = findSnapshotAtOrBefore(session, burst.localStart - 1);
   let cursor;
   if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-  else      { doc = "";                  cursor = -1; }
+  else      { doc = session.initial_document; cursor = -1; }
   for (let i = cursor + 1; i < burst.localStart; i++) {
     const ev = session.events[i];
     if (ev.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
@@ -1030,11 +1038,11 @@ function computeBurstRange(burst) {
     if (newLen <= 0) return null;
     return { start: first.offset, end: first.offset + newLen };
   }
-  let doc = "";
+  let doc = session.initial_document;
   const snap = findSnapshotAtOrBefore(session, burst.localStart - 1);
   let cursor;
   if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-  else      { doc = "";                  cursor = -1; }
+  else      { doc = session.initial_document; cursor = -1; }
   for (let i = cursor + 1; i < burst.localStart; i++) {
     const ev = session.events[i];
     if (ev.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
@@ -1132,11 +1140,11 @@ const BURST_APEX_BY_IDX = (() => {
     if (!fragment || fragment.length === 0) continue;
 
     // Replay session document through localEnd.
-    let doc = "";
+    let doc = session.initial_document;
     const snap = findSnapshotAtOrBefore(session, b.localEnd);
     let cursor;
     if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-    else      { doc = ""; cursor = -1; }
+    else      { doc = session.initial_document; cursor = -1; }
     for (let i = cursor + 1; i <= b.localEnd; i++) {
       const ev = session.events[i];
       if (ev?.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
@@ -1185,8 +1193,8 @@ function computeVisual() {
   const evs = STATE.globalEvents;
   const offs = new Array(evs.length);
   if (!evs.length) return { offsets: offs, total: 0 };
-  let acc = 0;
-  offs[0] = 0;
+  let acc = Math.max(0, (evs[0].ts - Date.parse(STATE.meta.start_time)) / 1000);
+  offs[0] = acc;
   let prev = evs[0].ts;
   for (let i = 1; i < evs.length; i++) {
     const t = evs[i].ts;
@@ -1255,7 +1263,8 @@ function renderTimeReadout() {
   const ev = idx >= 0 ? evs[idx] : null;
   let t;
   if (!ev) {
-    t = Date.parse(STATE.meta.start_time);
+    const target = (STATE.playheadPct / 100) * VISUAL.total;
+    t = Date.parse(STATE.meta.start_time) + target * 1000;
   } else if (idx < evs.length - 1) {
     const cur = VISUAL.offsets[idx];
     const next = VISUAL.offsets[idx + 1];
@@ -1372,6 +1381,7 @@ function scrubToIdx(idx) {
 function visualPctToEventIdx(pct) {
   if (VISUAL.total <= 0 || !VISUAL.offsets.length) return -1;
   const target = (pct / 100) * VISUAL.total;
+  if (target < VISUAL.offsets[0]) return -1;
   let lo = 0, hi = VISUAL.offsets.length - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;

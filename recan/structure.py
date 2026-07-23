@@ -78,6 +78,7 @@ class TimelineEntry(TypedDict, total=False):
 class Session(TypedDict):
     document: str
     language: str
+    initial_document: str
     start_time: datetime
     end_time: datetime
     total_time: float

@@ -24,6 +24,7 @@ def _to_session_bundle(session: Session) -> dict:
     return {
         "document":                session["document"],
         "language":                session["language"],
+        "initial_document":        session.get("initial_document", ""),
         "start_time":              _iso_z(session["start_time"]),
         "end_time":                _iso_z(session["end_time"]),
         "total_time":              session["total_time"],

@@ -60,6 +60,7 @@ class _SessionState:
     bursts: list[Burst] = field(default_factory=list)
     timeline: list[TimelineEntry] = field(default_factory=list)
     cluster: _Cluster = field(default_factory=_Cluster)
+    initial_document: str = ""
     document: str = ""
     document_name: str = ""
     blur_idx: int | None = None
@@ -94,6 +95,28 @@ def _event_kind(event: dict) -> str:
         return "edit"
 
     return "unknown"
+
+
+def _is_initial_snapshot(event: dict, event_idx: int) -> bool:
+    """Whether an event is the recorder's non-edit initial document snapshot."""
+    return (
+        event_idx == 0
+        and _event_kind(event) == "edit"
+        and event.get("offset", 0) == 0
+        and event.get("oldFragment") == event.get("newFragment")
+    )
+
+
+def _initialize_from_snapshot(event: dict, state: _SessionState) -> None:
+    """Seed reconstruction from the recorder snapshot without counting an edit."""
+    document = event.get("newFragment", "")
+    state.initial_document = document
+    state.document = document
+
+    doc = event.get("document", "")
+    if doc:
+        document_name = PureWindowsPath(doc).name
+        state.document_name = Path(document_name).stem
 
 
 def _is_generated_edit(event: dict) -> bool:
@@ -477,6 +500,7 @@ def _build_session(state: _SessionState) -> Session:
     return {
         "document": state.document_name,
         "language": language_from_extension(state.document_name, state.document),
+        "initial_document": state.initial_document,
         "start_time": state.start_time,
         "end_time": state.end_time,
         "total_time": total_time,
@@ -524,9 +548,14 @@ def analyze_events(
     """
     state = _SessionState()
 
-    for event in events:
+    for event_idx, event in enumerate(events):
         ts = parse_ts(event["timestamp"])
         _record_idle_gap(state, ts)
+
+        if _is_initial_snapshot(event, event_idx):
+            _initialize_from_snapshot(event, state)
+            continue
+
         kind = _event_kind(event)
 
         if kind == "focusStatus":
