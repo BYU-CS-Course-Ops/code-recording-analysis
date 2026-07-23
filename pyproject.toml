@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "byu-recan"
-version = "0.0.0"
+version = "0.2.15"
 description = "Analyze IDE recording files."
 authors = ["Gordon Bean <gbean@cs.byu.edu>", "Robert Greathouse <robbykap@byu.edu>"]
 license = "MIT"
