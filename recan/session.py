@@ -230,7 +230,7 @@ def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
 
     if state.prev_ts is not None:
         gap_seconds = (ts - state.prev_ts).total_seconds()
-        if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS:
+        if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS and state.events:
             idle_gap: IdleGap = {
                 "after_idx": len(state.events) - 1,
                 "duration": gap_seconds,

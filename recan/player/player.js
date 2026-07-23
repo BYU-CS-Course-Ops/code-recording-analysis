@@ -238,7 +238,7 @@ function buildGlobalState(rawSessions) {
   sessions.forEach((s, si) => {
     (s.idle_gaps || []).forEach(g => {
       const gIdx = localToGlobal[si][g.after_idx];
-      if (gIdx < 0) return;
+      if (!Number.isInteger(gIdx) || gIdx < 0) return;
       idleGaps.push({
         sessionIdx: si,
         after_idx: gIdx,

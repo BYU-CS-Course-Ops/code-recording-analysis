@@ -21,7 +21,7 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
     initial = "answer = 41\n"
     events = [
         _event("2026-01-01T00:00:00Z", 0, initial, initial),
-        _event("2026-01-01T00:00:01Z", 9, "41", "42"),
+        _event("2026-01-01T00:00:10Z", 9, "41", "42"),
     ]
 
     session = analyze_events(events)
@@ -30,6 +30,7 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
     assert session["total_edits"] == 1
     assert session["total_chars"] == len("answer = 42\n")
     assert len(session["events"]) == 1
+    assert session["idle_gaps"] == []
     assert session["snapshots"][-1]["document_text"] == "answer = 42\n"
 
     bundle = _to_session_bundle(session)
