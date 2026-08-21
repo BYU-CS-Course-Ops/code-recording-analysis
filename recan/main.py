@@ -78,7 +78,7 @@ def _parse_view(subparsers):
                 <recording_file(s)>                                          - Required
                 [--exclude .ext1 .ext2 ...]                                  - Optional
                 [--approved-pastes approved.txt]                             - Optional
-                [--auto-open]`                                               - Optional (defaults to true)
+                [--auto-open]`                                               - Optional (defaults to false)
     """
     view = subparsers.add_parser("view", help="Generate a self-contained HTML player for a recording.")
 
@@ -86,7 +86,7 @@ def _parse_view(subparsers):
 
     add_common(view)
 
-    view.add_argument("--auto-open", action="store_true", default=True, help="Open the generated HTML in the default web browser (default: true).")
+    view.add_argument("--auto-open", action="store_true", help="Open the generated HTML in the default web browser (default: false).")
 
     view.set_defaults(func=_handle_view)
 
