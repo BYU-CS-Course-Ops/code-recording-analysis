@@ -461,6 +461,13 @@ function basename(p) {
   return parts[parts.length - 1] || p;
 }
 
+// Use at HTML interpolation sites, for both text and quoted attributes.
+// Keep the original names intact for textContent, paths, and reconstruction.
+function escapeHtml(value) {
+  const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  return String(value).replace(/[&<>"']/g, ch => entities[ch]);
+}
+
 function langTabDotClass(lang) {
   const k = (lang || "").toLowerCase();
   if (k === "py") return "lang-python";
@@ -722,9 +729,9 @@ function renderStatsSidebar() {
     const flags = s.total_ide_actions + s.total_approved_pastes
                 + s.total_internal_pastes + s.total_unapproved_pastes;
     return `
-      <button class="session-row" data-session="${i}" title="${s.document.replace(/"/g, "&quot;")}">
-        <span class="session-row-dot tab-dot ${langTabDotClass(resolveSessionLanguage(s))}"></span>
-        <span class="session-row-name">${n}</span>
+      <button class="session-row" data-session="${i}" title="${escapeHtml(s.document)}">
+        <span class="session-row-dot tab-dot ${escapeHtml(langTabDotClass(resolveSessionLanguage(s)))}"></span>
+        <span class="session-row-name">${escapeHtml(n)}</span>
         <span class="session-row-meta">${fmtDuration(s.total_time || 0)}${flags ? ` · ${flags} flag${flags === 1 ? "" : "s"}` : ""}</span>
       </button>`;
   }).join("");
@@ -856,8 +863,8 @@ function renderFlagsList() {
       <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}>
         <span class="flag-icon">${g.icon}</span>
         <span class="flag-body">
-          <span class="flag-title">${it.title}</span>
-          <span class="flag-meta">${it.meta}</span>
+          <span class="flag-title">${escapeHtml(it.title)}</span>
+          <span class="flag-meta">${escapeHtml(it.meta)}</span>
         </span>
       </button>`).join("");
     return `
@@ -1240,13 +1247,13 @@ function renderTimelineMarkers() {
   }
   for (const burst of STATE.bursts) {
     const a = visualPctForIdx(burst.start_idx);
-    parts.push(`<div class="tick-burst ${kindClass(burst.kind)}" style="left:${a}%"></div>`);
+    parts.push(`<div class="tick-burst ${escapeHtml(kindClass(burst.kind))}" style="left:${a}%"></div>`);
   }
   for (const sb of STATE.sessionBoundaries) {
     const a = visualPctForIdx(sb.globalIdx);
     const fromName = basename(STATE.sessions[sb.fromIdx].document);
     const toName = basename(STATE.sessions[sb.toIdx].document);
-    parts.push(`<div class="tick-session" data-from="${sb.fromIdx}" data-to="${sb.toIdx}" title="${fromName} → ${toName}" style="left:${a}%"></div>`);
+    parts.push(`<div class="tick-session" data-from="${sb.fromIdx}" data-to="${sb.toIdx}" title="${escapeHtml(fromName)} → ${escapeHtml(toName)}" style="left:${a}%"></div>`);
   }
   host.innerHTML = parts.join("");
 }
@@ -1431,7 +1438,7 @@ function timelineHover(clientX) {
   let tag = "";
   for (const b of STATE.bursts) {
     if (idx >= b.start_idx && idx <= b.end_idx) {
-      tag = `<span class="tt-tag ${kindClass(b.kind)}">${kindLabel(b.kind)}</span>`;
+      tag = `<span class="tt-tag ${escapeHtml(kindClass(b.kind))}">${kindLabel(b.kind)}</span>`;
       break;
     }
   }
@@ -1449,7 +1456,7 @@ function timelineHover(clientX) {
     ? ` · ${basename(STATE.sessions[ev.sessionIdx].document)}`
     : "";
   const elapsed = (ev.ts - Date.parse(STATE.meta.start_time)) / 1000;
-  tooltip.innerHTML = `+${fmtDuration(elapsed)}${tag}<span class="tt-doc">${sessName}</span>`;
+  tooltip.innerHTML = `+${fmtDuration(elapsed)}${tag}<span class="tt-doc">${escapeHtml(sessName)}</span>`;
   tooltip.style.left = pct + "%";
   tooltip.classList.add("show");
 }

@@ -83,6 +83,9 @@ class DocumentMatcher:
             - `_snapshot_ends` / `_snapshot_times` (so a wall-clock ts can later
               be resolved to a byte cutoff)
         """
+        if self._snapshot_times and ts < self._snapshot_times[-1]:
+            raise ValueError("DocumentMatcher edits must be in timestamp order.")
+        self._sa = None
         self._document = splice(self._document, offset, old_fragment, new_fragment)
 
         # Append the new full document state to the corpus, terminated by SENTINEL.

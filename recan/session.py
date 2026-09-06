@@ -63,6 +63,7 @@ class _SessionState:
     initial_document: str = ""
     document: str = ""
     document_name: str = ""
+    document_filename: str = ""
     blur_idx: int | None = None
     blur_ts: datetime | None = None
     prev_ts: datetime | None = None
@@ -116,6 +117,7 @@ def _initialize_from_snapshot(event: dict, state: _SessionState) -> None:
     doc = event.get("document", "")
     if doc:
         document_name = PureWindowsPath(doc).name
+        state.document_filename = document_name
         state.document_name = Path(document_name).stem
 
 
@@ -297,7 +299,9 @@ def _accum_typing_time(state: _SessionState, ts: datetime, is_generated: bool) -
         return
 
     if state.last_typed_ts is not None:
-        state.total_time_typing += (ts - state.last_typed_ts).total_seconds()
+        elapsed = (ts - state.last_typed_ts).total_seconds()
+        if 0 <= elapsed <= IDLE_GAP_THRESHOLD_SECONDS:
+            state.total_time_typing += elapsed
 
     state.last_typed_ts = ts
 
@@ -320,6 +324,7 @@ def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
     if not state.document_name:
         # Get the stem of the document path as the document name, need to handle both windows and unix paths
         document_name = PureWindowsPath(doc).name
+        state.document_filename = document_name
         document_name = Path(document_name).stem
         state.document_name = document_name
 
@@ -499,7 +504,7 @@ def _build_session(state: _SessionState) -> Session:
 
     return {
         "document": state.document_name,
-        "language": language_from_extension(state.document_name, state.document),
+        "language": language_from_extension(state.document_filename, state.document),
         "initial_document": state.initial_document,
         "start_time": state.start_time,
         "end_time": state.end_time,

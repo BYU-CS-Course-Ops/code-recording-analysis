@@ -13,19 +13,9 @@ def parse_ts(value: str) -> datetime:
     """
     Tolerant ISO timestamp parser.
 
-    Python's fromisoformat tolerates "Z" only from 3.11+, and chokes on
-    nanosecond precision (e.g. "...916473800Z"). Trim to microseconds.
+    Python 3.12+ accepts Z and truncates fractional seconds to microseconds.
     """
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-
-    head, sep, tz = value.partition("+")
-
-    if "." in head:
-        whole, frac = head.split(".")
-        head = f"{whole}.{frac[:6]}"
-
-    return datetime.fromisoformat(head + sep + tz)
+    return datetime.fromisoformat(value)
 
 
 def format_duration(seconds: float) -> str:
@@ -129,7 +119,7 @@ def _get_recordings(paths: list[Path]) -> list[Path]:
         if path.is_file():
             candidates = [path]
         else:
-            candidates = [Path(p) for p in glob(str(path)) if Path(p).is_file()]
+            candidates = [Path(p) for p in glob(str(path), recursive=True) if Path(p).is_file()]
 
         for c in candidates:
             resolved = c.resolve()
@@ -151,9 +141,9 @@ def _load_recording(path: Path, excluded_file_types: list[str]) -> list[dict]:
     opener = gzip.open if path.suffix == ".gz" else open
 
     try:
-        with opener(path, "rt") as f:
+        with opener(path, "rt", encoding="utf-8") as f:
             events = [json.loads(line) for line in f]
-    except (gzip.BadGzipFile, zlib.error, json.JSONDecodeError, OSError) as e:
+    except (EOFError, UnicodeError, zlib.error, json.JSONDecodeError, OSError) as e:
         print(f"Error reading {path}: {e}")
         return []
 
