@@ -1,7 +1,7 @@
 import logging
 import webbrowser
 from pathlib import Path
-from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+from argparse import ArgumentParser, Namespace
 
 from .formaters import render_json, render_markdown
 from .viewer import write_player_html
@@ -82,7 +82,7 @@ def _parse_view(subparsers):
                 <recording_file(s)>                                          - Required
                 [--exclude .ext1 .ext2 ...]                                  - Optional
                 [--approved-pastes approved.txt]                             - Optional
-                [--auto-open]`                                               - Optional (defaults to true)
+                [--no-open]`                                                 - Optional
     """
     view = subparsers.add_parser("view", help="Generate a self-contained HTML player for a recording.")
 
@@ -90,7 +90,13 @@ def _parse_view(subparsers):
 
     add_common(view)
 
-    view.add_argument("--auto-open", action=BooleanOptionalAction, default=True, help="Open the generated HTML in the default web browser (default: true).")
+    view.add_argument(
+        "--no-open",
+        dest="auto_open",
+        action="store_false",
+        default=True,
+        help="Write the generated HTML without opening it in a browser.",
+    )
 
     view.set_defaults(func=_handle_view)
 

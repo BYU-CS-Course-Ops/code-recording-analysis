@@ -75,13 +75,13 @@ open it directly, no server required. You can scrub the timeline, jump between b
 document state at any point.
 
 ```bash
-recan view <recording_file(s)> [common args] [--auto-open]
+recan view <recording_file(s)> [common args] [--no-open]
 ```
 
 | Flag              | Description                                                     |
 |-------------------|-----------------------------------------------------------------|
 | `recording_files` | One or more recording files or glob patterns (required).        |
-| `--auto-open` / `--no-auto-open` | Enable or disable opening the browser (on by default). |
+| `--no-open`       | Write the player without opening it in a browser.                 |
 
 **Example**
 

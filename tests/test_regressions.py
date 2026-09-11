@@ -71,7 +71,8 @@ def test_recordings_use_utf8(tmp_path, compressed):
 def test_view_can_disable_browser_launch():
     parser = ArgumentParser()
     _parse_view(parser.add_subparsers())
-    assert parser.parse_args(["view", "test.jsonl", "--no-auto-open"]).auto_open is False
+    assert parser.parse_args(["view", "test.jsonl"]).auto_open is True
+    assert parser.parse_args(["view", "test.jsonl", "--no-open"]).auto_open is False
 
 
 def test_view_glob_uses_first_matched_recording_for_output(tmp_path):
