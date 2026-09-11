@@ -52,6 +52,7 @@ function normalizeLegacy(b) {
   return normalizeSession({
     document: m.document,
     language: m.language,
+    initial_document: b.initial_document || "",
     start_time: m.start_time,
     end_time: m.end_time,
     total_time: s.total_seconds,
@@ -73,6 +74,7 @@ function normalizeSession(s) {
   const session = {
     document:               s.document               || "(unnamed)",
     language:               s.language               || "plaintext",
+    initial_document:       s.initial_document       || "",
     start_time:             s.start_time,
     end_time:               s.end_time,
     total_time:             s.total_time             ?? 0,
@@ -87,8 +89,8 @@ function normalizeSession(s) {
     idle_gaps:              s.idle_gaps              || [],
     focus_intervals:        s.focus_intervals        || [],
     snapshots:              s.snapshots              || [],
-    // Live per-session reconstructed document. Empty until we apply events.
-    doc: "",
+    // Live per-session reconstructed document, seeded from the recorder snapshot.
+    doc: s.initial_document || "",
     docCursor: -1,    // largest local idx whose edit has been applied to `doc`
   };
   growBurstsByTimeProximity(session);
@@ -236,7 +238,7 @@ function buildGlobalState(rawSessions) {
   sessions.forEach((s, si) => {
     (s.idle_gaps || []).forEach(g => {
       const gIdx = localToGlobal[si][g.after_idx];
-      if (gIdx < 0) return;
+      if (!Number.isInteger(gIdx) || gIdx < 0) return;
       idleGaps.push({
         sessionIdx: si,
         after_idx: gIdx,
@@ -291,10 +293,16 @@ function buildGlobalState(rawSessions) {
     unfocused_seconds: 0, total_seconds: 0,
   });
 
-  // Overall meta. Range = first event → last event across all sessions.
+  // Overall meta includes initial snapshots that predate the first real edit.
+  const sessionStarts = sessions.map(s => Date.parse(s.start_time)).filter(Number.isFinite);
+  const sessionEnds = sessions.map(s => Date.parse(s.end_time)).filter(Number.isFinite);
   const meta = {
-    start_time: globalEvents[0]?.timestamp || sessions[0]?.start_time,
-    end_time:   globalEvents[globalEvents.length - 1]?.timestamp || sessions[sessions.length - 1]?.end_time,
+    start_time: sessionStarts.length
+      ? new Date(Math.min(...sessionStarts)).toISOString()
+      : globalEvents[0]?.timestamp,
+    end_time: sessionEnds.length
+      ? new Date(Math.max(...sessionEnds)).toISOString()
+      : globalEvents[globalEvents.length - 1]?.timestamp,
     documents:  sessions.map(s => s.document),
   };
 
@@ -361,11 +369,11 @@ function findSnapshotAtOrBefore(session, localTargetIdx) {
 // Rebuild a single session's doc state to the given LOCAL target idx
 // (idx === -1 means "before any events of this session").
 function rebuildSessionTo(session, localTargetIdx) {
-  if (localTargetIdx < 0) { session.doc = ""; session.docCursor = -1; return; }
+  if (localTargetIdx < 0) { session.doc = session.initial_document; session.docCursor = -1; return; }
   const snap = findSnapshotAtOrBefore(session, localTargetIdx);
   let doc, cursor;
   if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-  else      { doc = ""; cursor = -1; }
+  else      { doc = session.initial_document; cursor = -1; }
   for (let i = cursor + 1; i <= localTargetIdx; i++) {
     const ev = session.events[i];
     if (ev?.type === "edit") {
@@ -377,8 +385,8 @@ function rebuildSessionTo(session, localTargetIdx) {
 }
 
 // Given a global playhead position, rebuild EVERY session's doc to reflect
-// the latest event from that session that has fired so far. Sessions whose
-// first event hasn't fired yet end up empty.
+// the latest event from that session that has fired so far. Before a
+// session's first edit, its initial snapshot is shown.
 function rebuildAllSessionsToGlobalIdx(globalIdx) {
   // For each session, find the largest localIdx whose globalIdx <= target.
   // localToGlobal[si] is monotonic-ish (a session's events appear in time
@@ -451,6 +459,13 @@ function basename(p) {
   if (!p) return "(unknown)";
   const parts = p.split(/[\\/]/);
   return parts[parts.length - 1] || p;
+}
+
+// Use at HTML interpolation sites, for both text and quoted attributes.
+// Keep the original names intact for textContent, paths, and reconstruction.
+function escapeHtml(value) {
+  const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  return String(value).replace(/[&<>"']/g, ch => entities[ch]);
 }
 
 function langTabDotClass(lang) {
@@ -714,9 +729,9 @@ function renderStatsSidebar() {
     const flags = s.total_ide_actions + s.total_approved_pastes
                 + s.total_internal_pastes + s.total_unapproved_pastes;
     return `
-      <button class="session-row" data-session="${i}" title="${s.document.replace(/"/g, "&quot;")}">
-        <span class="session-row-dot tab-dot ${langTabDotClass(resolveSessionLanguage(s))}"></span>
-        <span class="session-row-name">${n}</span>
+      <button class="session-row" data-session="${i}" title="${escapeHtml(s.document)}">
+        <span class="session-row-dot tab-dot ${escapeHtml(langTabDotClass(resolveSessionLanguage(s)))}"></span>
+        <span class="session-row-name">${escapeHtml(n)}</span>
         <span class="session-row-meta">${fmtDuration(s.total_time || 0)}${flags ? ` · ${flags} flag${flags === 1 ? "" : "s"}` : ""}</span>
       </button>`;
   }).join("");
@@ -848,8 +863,8 @@ function renderFlagsList() {
       <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}>
         <span class="flag-icon">${g.icon}</span>
         <span class="flag-body">
-          <span class="flag-title">${it.title}</span>
-          <span class="flag-meta">${it.meta}</span>
+          <span class="flag-title">${escapeHtml(it.title)}</span>
+          <span class="flag-meta">${escapeHtml(it.meta)}</span>
         </span>
       </button>`).join("");
     return `
@@ -973,11 +988,11 @@ function computeBurstApex(burst) {
   const first = session.events[burst.localStart];
   if (!first) return null;
 
-  let doc = "";
+  let doc = session.initial_document;
   const snap = findSnapshotAtOrBefore(session, burst.localStart - 1);
   let cursor;
   if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-  else      { doc = "";                  cursor = -1; }
+  else      { doc = session.initial_document; cursor = -1; }
   for (let i = cursor + 1; i < burst.localStart; i++) {
     const ev = session.events[i];
     if (ev.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
@@ -1030,11 +1045,11 @@ function computeBurstRange(burst) {
     if (newLen <= 0) return null;
     return { start: first.offset, end: first.offset + newLen };
   }
-  let doc = "";
+  let doc = session.initial_document;
   const snap = findSnapshotAtOrBefore(session, burst.localStart - 1);
   let cursor;
   if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-  else      { doc = "";                  cursor = -1; }
+  else      { doc = session.initial_document; cursor = -1; }
   for (let i = cursor + 1; i < burst.localStart; i++) {
     const ev = session.events[i];
     if (ev.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
@@ -1132,11 +1147,11 @@ const BURST_APEX_BY_IDX = (() => {
     if (!fragment || fragment.length === 0) continue;
 
     // Replay session document through localEnd.
-    let doc = "";
+    let doc = session.initial_document;
     const snap = findSnapshotAtOrBefore(session, b.localEnd);
     let cursor;
     if (snap) { doc = snap.document_text; cursor = snap.after_idx; }
-    else      { doc = ""; cursor = -1; }
+    else      { doc = session.initial_document; cursor = -1; }
     for (let i = cursor + 1; i <= b.localEnd; i++) {
       const ev = session.events[i];
       if (ev?.type === "edit") doc = applyEdit(doc, ev.offset, ev.oldFragment, ev.newFragment);
@@ -1185,8 +1200,8 @@ function computeVisual() {
   const evs = STATE.globalEvents;
   const offs = new Array(evs.length);
   if (!evs.length) return { offsets: offs, total: 0 };
-  let acc = 0;
-  offs[0] = 0;
+  let acc = Math.max(0, (evs[0].ts - Date.parse(STATE.meta.start_time)) / 1000);
+  offs[0] = acc;
   let prev = evs[0].ts;
   for (let i = 1; i < evs.length; i++) {
     const t = evs[i].ts;
@@ -1232,13 +1247,13 @@ function renderTimelineMarkers() {
   }
   for (const burst of STATE.bursts) {
     const a = visualPctForIdx(burst.start_idx);
-    parts.push(`<div class="tick-burst ${kindClass(burst.kind)}" style="left:${a}%"></div>`);
+    parts.push(`<div class="tick-burst ${escapeHtml(kindClass(burst.kind))}" style="left:${a}%"></div>`);
   }
   for (const sb of STATE.sessionBoundaries) {
     const a = visualPctForIdx(sb.globalIdx);
     const fromName = basename(STATE.sessions[sb.fromIdx].document);
     const toName = basename(STATE.sessions[sb.toIdx].document);
-    parts.push(`<div class="tick-session" data-from="${sb.fromIdx}" data-to="${sb.toIdx}" title="${fromName} → ${toName}" style="left:${a}%"></div>`);
+    parts.push(`<div class="tick-session" data-from="${sb.fromIdx}" data-to="${sb.toIdx}" title="${escapeHtml(fromName)} → ${escapeHtml(toName)}" style="left:${a}%"></div>`);
   }
   host.innerHTML = parts.join("");
 }
@@ -1255,7 +1270,8 @@ function renderTimeReadout() {
   const ev = idx >= 0 ? evs[idx] : null;
   let t;
   if (!ev) {
-    t = Date.parse(STATE.meta.start_time);
+    const target = (STATE.playheadPct / 100) * VISUAL.total;
+    t = Date.parse(STATE.meta.start_time) + target * 1000;
   } else if (idx < evs.length - 1) {
     const cur = VISUAL.offsets[idx];
     const next = VISUAL.offsets[idx + 1];
@@ -1372,6 +1388,7 @@ function scrubToIdx(idx) {
 function visualPctToEventIdx(pct) {
   if (VISUAL.total <= 0 || !VISUAL.offsets.length) return -1;
   const target = (pct / 100) * VISUAL.total;
+  if (target < VISUAL.offsets[0]) return -1;
   let lo = 0, hi = VISUAL.offsets.length - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
@@ -1421,7 +1438,7 @@ function timelineHover(clientX) {
   let tag = "";
   for (const b of STATE.bursts) {
     if (idx >= b.start_idx && idx <= b.end_idx) {
-      tag = `<span class="tt-tag ${kindClass(b.kind)}">${kindLabel(b.kind)}</span>`;
+      tag = `<span class="tt-tag ${escapeHtml(kindClass(b.kind))}">${kindLabel(b.kind)}</span>`;
       break;
     }
   }
@@ -1439,7 +1456,7 @@ function timelineHover(clientX) {
     ? ` · ${basename(STATE.sessions[ev.sessionIdx].document)}`
     : "";
   const elapsed = (ev.ts - Date.parse(STATE.meta.start_time)) / 1000;
-  tooltip.innerHTML = `+${fmtDuration(elapsed)}${tag}<span class="tt-doc">${sessName}</span>`;
+  tooltip.innerHTML = `+${fmtDuration(elapsed)}${tag}<span class="tt-doc">${escapeHtml(sessName)}</span>`;
   tooltip.style.left = pct + "%";
   tooltip.classList.add("show");
 }

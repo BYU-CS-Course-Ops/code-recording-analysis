@@ -1,9 +1,10 @@
-"""End-to-end tests: drive analyze_inputs with synthetic event streams and
+"""End-to-end tests: drive analyze_events with synthetic event streams and
 assert that the resulting Burst.kind values reflect internal-paste logic."""
 
 from datetime import datetime, timedelta
 
-from recan.session import analyze_inputs
+from recan.session import analyze_events
+from recan.algorithm import build_matcher
 
 
 def _ts(base: datetime, ms: int) -> str:
@@ -53,7 +54,7 @@ def test_internal_paste_after_explicit_deletion():
     })
     events.append(_paste_edit(block, 0, _ts(base, 15_000)))
 
-    session = analyze_inputs(events, approved_fragments=[])
+    session = analyze_events(events, [build_matcher(events)])
     paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
     assert len(paste_bursts) == 1
     assert paste_bursts[0]["kind"] == "internal paste"
@@ -67,7 +68,7 @@ def test_internal_paste_matches_transient_state_not_in_final_doc():
     The matcher must find it via the transient-state snapshot in history."""
     base = datetime(2026, 5, 14, 12, 0, 0)
 
-    line = "def calculate_average_value():"  # 30 chars - >= 20 so paste is "generated"
+    line = "def calculate_average_value():"
     events = list(_typing_edits(line, base, start_ms=0))
     # Doc state now == line.
 
@@ -82,17 +83,16 @@ def test_internal_paste_matches_transient_state_not_in_final_doc():
     # Now generate-paste `line` at offset 0. It matches the transient pre-mutation state.
     events.append(_paste_edit(line, 0, _ts(base, 10_000)))
 
-    session = analyze_inputs(events, approved_fragments=[])
+    session = analyze_events(events, [build_matcher(events)])
     paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
-    assert len(paste_bursts) == 1
-    assert paste_bursts[0]["kind"] == "internal paste"
+    assert [b["kind"] for b in paste_bursts] == ["unapproved paste", "internal paste"]
     assert session["total_internal_pastes"] == 1
 
 
 def test_approved_paste_beats_internal():
     """A fragment that's BOTH internal AND approved is labeled approved."""
     base = datetime(2026, 5, 14, 12, 0, 0)
-    block = "def starter_template():\n    pass\n"
+    block = "print('starter template')\n"
 
     events = []
     events.extend(_typing_edits(block, base, start_ms=0))
@@ -103,7 +103,7 @@ def test_approved_paste_beats_internal():
     })
     events.append(_paste_edit(block, 0, _ts(base, 15_000)))
 
-    session = analyze_inputs(events, approved_fragments=[block])
+    session = analyze_events(events, [build_matcher(events)], approved_pastes=block)
     paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
     assert len(paste_bursts) == 1
     assert paste_bursts[0]["kind"] == "approved paste"
@@ -123,7 +123,7 @@ def test_external_fragment_still_unapproved():
         _ts(base, 10_000),
     ))
 
-    session = analyze_inputs(events, approved_fragments=[])
+    session = analyze_events(events, [build_matcher(events)])
     paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
     assert len(paste_bursts) == 1
     assert paste_bursts[0]["kind"] == "unapproved paste"
