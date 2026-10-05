@@ -41,6 +41,11 @@ class FocusStatusInput(Input):
     focused: bool
 
 
+class InitialSnapshotInput(Input):
+    type: Literal['initialSnapshot']
+    document_text: str
+
+
 class FocusInterval(TypedDict):
     blur_idx: int
     focus_idx: int

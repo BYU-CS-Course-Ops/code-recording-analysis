@@ -168,6 +168,7 @@ function buildGlobalState(rawSessions) {
         timestamp: ev.timestamp,
         ts: Date.parse(ev.timestamp),
         type: ev.type,
+        documentText: ev.document_text,
         offset: ev.offset,
         oldFragment: ev.oldFragment,
         newFragment: ev.newFragment,
@@ -856,6 +857,7 @@ function renderFlagsList() {
       title: "Initial character limit exceeded",
       meta: `+${fmtDuration(elapsed)} · ${s.initial_document.length} initial character${s.initial_document.length === 1 ? "" : "s"}${docSuffix}`,
       idx,
+      initialSessionIdx: i,
     });
   });
 
@@ -884,7 +886,7 @@ function renderFlagsList() {
     if (!g.items.length) return "";
     const open = g.items.length <= 4 ? " open" : "";
     const flags = g.items.map((it) => `
-      <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}>
+      <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}${it.initialSessionIdx != null ? ` data-initial-session="${it.initialSessionIdx}"` : ""}>
         <span class="flag-icon">${g.icon}</span>
         <span class="flag-body">
           <span class="flag-title">${escapeHtml(it.title)}</span>
@@ -907,6 +909,14 @@ function renderFlagsList() {
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = parseInt(btn.getAttribute("data-idx"), 10);
+      const initialSessionAttr = btn.getAttribute("data-initial-session");
+      if (initialSessionAttr != null) {
+        const sessionIdx = parseInt(initialSessionAttr, 10);
+        scrubToIdx(idx);
+        if (STATE.activeIdx !== sessionIdx) setActiveSession(sessionIdx, { flash: false, scrub: false });
+        highlightInitialDocument(STATE.sessions[sessionIdx]);
+        return;
+      }
       const bAttr = btn.getAttribute("data-burst");
       if (bAttr != null) {
         const burst = STATE.bursts[parseInt(bAttr, 10)];
@@ -933,6 +943,44 @@ function clearFragmentHighlight() {
   CSS.highlights.delete("burst-fragment-approved-paste");
   CSS.highlights.delete("burst-fragment-internal-paste");
   CSS.highlights.delete("burst-fragment-unapproved-paste");
+}
+
+function highlightInitialDocument(session) {
+  if (!(window.CSS && CSS.highlights && window.Highlight)) return;
+  clearFragmentHighlight();
+  const end = session.initial_document.length;
+  if (end <= 0) return;
+
+  requestAnimationFrame(() => {
+    const codeEl = $("editor-code");
+    if (!codeEl) return;
+    const range = new Range();
+    let pos = 0, started = false;
+    const walker = document.createTreeWalker(codeEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent.length;
+      if (!started && pos + len > 0) {
+        range.setStart(node, 0);
+        started = true;
+      }
+      if (started && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        try { CSS.highlights.set("burst-fragment-unapproved-paste", new Highlight(range)); } catch (e) {}
+        try {
+          const rects = range.getClientRects();
+          if (rects.length) {
+            const editor = $("editor");
+            const eb = editor.getBoundingClientRect();
+            const top = rects[0].top - eb.top + editor.scrollTop;
+            editor.scrollTo({ top: Math.max(0, top - 80), behavior: "smooth" });
+          }
+        } catch (e) {}
+        return;
+      }
+      pos += len;
+    }
+  });
 }
 
 /* =========================================================================

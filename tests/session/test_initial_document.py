@@ -29,7 +29,12 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
     assert session["initial_document"] == initial
     assert session["total_edits"] == 1
     assert session["total_chars"] == len("answer = 42\n")
-    assert len(session["events"]) == 1
+    assert len(session["events"]) == 2
+    assert session["events"][0] == {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "type": "initialSnapshot",
+        "document_text": initial,
+    }
     assert session["idle_gaps"] == []
     assert session["snapshots"][-1]["document_text"] == "answer = 42\n"
 

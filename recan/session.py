@@ -233,7 +233,11 @@ def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
 
     if state.prev_ts is not None:
         gap_seconds = (ts - state.prev_ts).total_seconds()
-        if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS and state.events:
+        if (
+            gap_seconds > IDLE_GAP_THRESHOLD_SECONDS
+            and state.events
+            and state.events[-1].get("type") != "initialSnapshot"
+        ):
             idle_gap: IdleGap = {
                 "after_idx": len(state.events) - 1,
                 "duration": gap_seconds,
@@ -562,6 +566,11 @@ def analyze_events(
 
         if _is_initial_snapshot(event, event_idx):
             _initialize_from_snapshot(event, state)
+            state.events.append({
+                "timestamp": event["timestamp"],
+                "type": "initialSnapshot",
+                "document_text": state.initial_document,
+            })
             if initial_char_limit is not None:
                 state.initial_char_limit_exceeded = len(state.initial_document) > initial_char_limit
             continue
