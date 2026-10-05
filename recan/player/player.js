@@ -234,8 +234,8 @@ function buildGlobalState(rawSessions) {
   });
   focusIntervals.sort((a, b) => a.blur_idx - b.blur_idx);
 
-  // Idle gaps — translate, AND add synthetic gaps for inter-session lulls
-  // (the moment between session A's last event and session B's first event).
+  // Idle gaps — translate recorder-reported pauses. Inter-session lulls are
+  // kept only as document boundaries, not emitted as idle events.
   const idleGaps = [];
   sessions.forEach((s, si) => {
     (s.idle_gaps || []).forEach(g => {
@@ -250,10 +250,8 @@ function buildGlobalState(rawSessions) {
     });
   });
 
-  // Inter-session lulls: walk globalEvents, every time we cross from session
-  // X → session Y add an idle gap at the last X event with duration = gap.
-  // The boundary itself (Y's first event) gets a session-boundary marker
-  // for the timeline.
+  // Inter-session lulls: walk globalEvents and mark document boundaries.
+  // No synthetic idle event is emitted for the time between documents.
   const sessionBoundaries = [];
   let lastBoundaryFrom = -1;
   for (let gi = 1; gi < globalEvents.length; gi++) {
@@ -261,13 +259,6 @@ function buildGlobalState(rawSessions) {
     const cur = globalEvents[gi];
     if (prev.sessionIdx !== cur.sessionIdx) {
       const dur = Math.max(0, (cur.ts - prev.ts) / 1000);
-      idleGaps.push({
-        sessionIdx: prev.sessionIdx,
-        toSessionIdx: cur.sessionIdx,
-        after_idx: gi - 1,
-        duration: dur,
-        kind: "session-lull",
-      });
       sessionBoundaries.push({
         globalIdx: gi,
         fromIdx: prev.sessionIdx,
