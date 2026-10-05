@@ -1118,10 +1118,10 @@ button { font: inherit; color: inherit; }
 .stats {
   background: var(--panel);
   border-right: 1px solid var(--border);
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   overflow-y: auto;
   min-height: 0;
 }
@@ -1129,7 +1129,7 @@ button { font: inherit; color: inherit; }
 .stats-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .stats-section-title {
   font-size: 10.5px;
@@ -1145,14 +1145,14 @@ button { font: inherit; color: inherit; }
 .stat-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 5px;
 }
 
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 1px;
+  padding: 7px 9px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1169,7 +1169,7 @@ button { font: inherit; color: inherit; }
 .stat-value {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   color: var(--fg);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;

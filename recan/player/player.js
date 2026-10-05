@@ -895,7 +895,7 @@ function renderFlagsList() {
       </details>`;
   };
 
-  host.innerHTML = [groups.ide_action, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.initial_char_limit, groups.unfocused].map(renderGroup).join("");
+  host.innerHTML = [groups.ide_action, groups.initial_char_limit, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
 
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {

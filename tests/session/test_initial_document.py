@@ -4,6 +4,7 @@ import json
 from recan.session import analyze_events
 from recan.utils import _load_recording
 from recan.viewer import _to_session_bundle
+from recan.formaters import render_markdown
 
 
 def _event(timestamp: str, offset: int, old: str, new: str) -> dict:
@@ -40,6 +41,10 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
 
     bundle = _to_session_bundle(session)
     assert bundle["initial_document"] == initial
+
+    summary = render_markdown([session])
+    assert "## Initial content" in summary
+    assert initial in summary
 
 
 def test_initial_character_limit_flags_only_when_exceeded():

@@ -1,4 +1,5 @@
 {%- set paste_entries = session.timeline | selectattr("kind", "equalto", "unapproved paste") | list -%}
+{%- set initial_entries = session.events | selectattr("type", "equalto", "initialSnapshot") | list -%}
 
 # **{{ session.document or "(unknown document)" }}**
 
@@ -24,6 +25,23 @@
 | **Unapproved pastes** | **{{ session.total_unapproved_pastes }}**           |
 | Initial characters | {{ len(session.initial_document) }}                 |
 | Initial limit exceeded | {{ "Yes" if session.initial_char_limit_exceeded else "No" }} |
+
+## Initial content
+
+{% if not initial_entries -%}
+*No initial content recorded.*
+{%- else -%}
+{% for entry in initial_entries %}
+### {{ entry.timestamp }}
+
+`{{ len(entry.document_text) }} character{{ "s" if len(entry.document_text) != 1 else "" }}`
+
+```{{ session.language }}
+{{ entry.document_text }}
+```
+
+{% endfor -%}
+{%- endif %}
 
 ## Unapproved pastes
 
