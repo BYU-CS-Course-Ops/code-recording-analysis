@@ -75,6 +75,7 @@ function normalizeSession(s) {
     document:               s.document               || "(unnamed)",
     language:               s.language               || "plaintext",
     initial_document:       s.initial_document       || "",
+    initial_char_limit_exceeded: Boolean(s.initial_char_limit_exceeded),
     start_time:             s.start_time,
     end_time:               s.end_time,
     total_time:             s.total_time             ?? 0,
@@ -167,6 +168,7 @@ function buildGlobalState(rawSessions) {
         timestamp: ev.timestamp,
         ts: Date.parse(ev.timestamp),
         type: ev.type,
+        documentText: ev.document_text,
         offset: ev.offset,
         oldFragment: ev.oldFragment,
         newFragment: ev.newFragment,
@@ -232,8 +234,8 @@ function buildGlobalState(rawSessions) {
   });
   focusIntervals.sort((a, b) => a.blur_idx - b.blur_idx);
 
-  // Idle gaps — translate, AND add synthetic gaps for inter-session lulls
-  // (the moment between session A's last event and session B's first event).
+  // Idle gaps — translate recorder-reported pauses. Inter-session lulls are
+  // kept only as document boundaries, not emitted as idle events.
   const idleGaps = [];
   sessions.forEach((s, si) => {
     (s.idle_gaps || []).forEach(g => {
@@ -248,10 +250,8 @@ function buildGlobalState(rawSessions) {
     });
   });
 
-  // Inter-session lulls: walk globalEvents, every time we cross from session
-  // X → session Y add an idle gap at the last X event with duration = gap.
-  // The boundary itself (Y's first event) gets a session-boundary marker
-  // for the timeline.
+  // Inter-session lulls: walk globalEvents and mark document boundaries.
+  // No synthetic idle event is emitted for the time between documents.
   const sessionBoundaries = [];
   let lastBoundaryFrom = -1;
   for (let gi = 1; gi < globalEvents.length; gi++) {
@@ -259,13 +259,6 @@ function buildGlobalState(rawSessions) {
     const cur = globalEvents[gi];
     if (prev.sessionIdx !== cur.sessionIdx) {
       const dur = Math.max(0, (cur.ts - prev.ts) / 1000);
-      idleGaps.push({
-        sessionIdx: prev.sessionIdx,
-        toSessionIdx: cur.sessionIdx,
-        after_idx: gi - 1,
-        duration: dur,
-        kind: "session-lull",
-      });
       sessionBoundaries.push({
         globalIdx: gi,
         fromIdx: prev.sessionIdx,
@@ -284,12 +277,14 @@ function buildGlobalState(rawSessions) {
     acc.approved_paste_count   += s.total_approved_pastes;
     acc.internal_paste_count   += s.total_internal_pastes;
     acc.unapproved_paste_count += s.total_unapproved_pastes;
+    acc.initial_char_limit_exceeded_count += s.initial_char_limit_exceeded ? 1 : 0;
     acc.unfocused_seconds      += s.total_time_unfocused;
     acc.total_seconds          += s.total_time;
     return acc;
   }, {
     edit_count: 0, ide_action_count: 0, approved_paste_count: 0,
     internal_paste_count: 0, unapproved_paste_count: 0,
+    initial_char_limit_exceeded_count: 0,
     unfocused_seconds: 0, total_seconds: 0,
   });
 
@@ -727,7 +722,8 @@ function renderStatsSidebar() {
   const sessionList = STATE.sessions.map((s, i) => {
     const n = basename(s.document);
     const flags = s.total_ide_actions + s.total_approved_pastes
-                + s.total_internal_pastes + s.total_unapproved_pastes;
+                + s.total_internal_pastes + s.total_unapproved_pastes
+                + (s.initial_char_limit_exceeded ? 1 : 0);
     return `
       <button class="session-row" data-session="${i}" title="${escapeHtml(s.document)}">
         <span class="session-row-dot tab-dot ${escapeHtml(langTabDotClass(resolveSessionLanguage(s)))}"></span>
@@ -775,6 +771,11 @@ function renderStatsSidebar() {
           <span class="stat-label">Unapproved pastes</span>
           <span class="stat-value">${sum.unapproved_paste_count}</span>
         </div>
+        <div class="stat">
+          <span class="stat-label">Initial character limit</span>
+          <span class="stat-value">${sum.initial_char_limit_exceeded_count}</span>
+          <span class="delta">recordings exceeded</span>
+        </div>
       </div>
     </div>
     ${STATE.sessions.length > 1 ? `
@@ -783,7 +784,7 @@ function renderStatsSidebar() {
       <div class="session-list">${sessionList}</div>
     </div>` : ""}
     <div class="stats-section">
-      <div class="stats-section-title">Key moments <span style="color:var(--fg-subtle);font-weight:500;letter-spacing:0">${STATE.bursts.length + STATE.focusIntervals.length}</span></div>
+      <div class="stats-section-title">Key moments <span style="color:var(--fg-subtle);font-weight:500;letter-spacing:0">${STATE.bursts.length + STATE.focusIntervals.length + STATE.sessions.filter(s => s.initial_char_limit_exceeded).length}</span></div>
       <div class="flags" id="flags-list"></div>
     </div>
   `;
@@ -809,6 +810,7 @@ function renderFlagsList() {
     "internal paste":   { kind: "internal paste",    cssKind: "internal-paste",   label: "Internal pastes",   icon: "↻", items: [] },
     "unapproved paste": { kind: "unapproved paste",  cssKind: "unapproved-paste", label: "Unapproved pastes", icon: "!", items: [] },
     unfocused:          { kind: "unfocused",         cssKind: "unfocused",        label: "Unfocused",          icon: "↗", items: [] },
+    initial_char_limit: { kind: "initial_char_limit", cssKind: "initial-char-limit", label: "Initial character limit", icon: "!", items: [] },
   };
 
   const counters = { ide_action: 0, "approved paste": 0, "internal paste": 0, "unapproved paste": 0 };
@@ -832,6 +834,21 @@ function renderFlagsList() {
       meta: `+${fmtDuration(elapsed)} · ${chars} char${chars === 1 ? "" : "s"}${docSuffix}`,
       idx: b.end_idx,
       burstIdx: STATE.bursts.indexOf(b),
+    });
+  });
+
+  STATE.sessions.forEach((s, i) => {
+    if (!s.initial_char_limit_exceeded) return;
+    const idx = STATE.localToGlobal[i]?.[0] ?? -1;
+    const startT = s.start_time;
+    const elapsed = (Date.parse(startT || STATE.meta.start_time) - Date.parse(STATE.meta.start_time)) / 1000;
+    const docName = basename(s.document);
+    const docSuffix = STATE.sessions.length > 1 ? ` · ${docName}` : "";
+    groups.initial_char_limit.items.push({
+      title: "Initial character limit exceeded",
+      meta: `+${fmtDuration(elapsed)} · ${s.initial_document.length} initial character${s.initial_document.length === 1 ? "" : "s"}${docSuffix}`,
+      idx,
+      initialSessionIdx: i,
     });
   });
 
@@ -860,7 +877,7 @@ function renderFlagsList() {
     if (!g.items.length) return "";
     const open = g.items.length <= 4 ? " open" : "";
     const flags = g.items.map((it) => `
-      <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}>
+      <button class="flag ${g.cssKind}" data-idx="${it.idx}"${it.burstIdx != null ? ` data-burst="${it.burstIdx}"` : ""}${it.initialSessionIdx != null ? ` data-initial-session="${it.initialSessionIdx}"` : ""}>
         <span class="flag-icon">${g.icon}</span>
         <span class="flag-body">
           <span class="flag-title">${escapeHtml(it.title)}</span>
@@ -878,11 +895,19 @@ function renderFlagsList() {
       </details>`;
   };
 
-  host.innerHTML = [groups.ide_action, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
+  host.innerHTML = [groups.ide_action, groups.initial_char_limit, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
 
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = parseInt(btn.getAttribute("data-idx"), 10);
+      const initialSessionAttr = btn.getAttribute("data-initial-session");
+      if (initialSessionAttr != null) {
+        const sessionIdx = parseInt(initialSessionAttr, 10);
+        scrubToIdx(idx);
+        if (STATE.activeIdx !== sessionIdx) setActiveSession(sessionIdx, { flash: false, scrub: false });
+        highlightInitialDocument(STATE.sessions[sessionIdx]);
+        return;
+      }
       const bAttr = btn.getAttribute("data-burst");
       if (bAttr != null) {
         const burst = STATE.bursts[parseInt(bAttr, 10)];
@@ -909,6 +934,44 @@ function clearFragmentHighlight() {
   CSS.highlights.delete("burst-fragment-approved-paste");
   CSS.highlights.delete("burst-fragment-internal-paste");
   CSS.highlights.delete("burst-fragment-unapproved-paste");
+}
+
+function highlightInitialDocument(session) {
+  if (!(window.CSS && CSS.highlights && window.Highlight)) return;
+  clearFragmentHighlight();
+  const end = session.initial_document.length;
+  if (end <= 0) return;
+
+  requestAnimationFrame(() => {
+    const codeEl = $("editor-code");
+    if (!codeEl) return;
+    const range = new Range();
+    let pos = 0, started = false;
+    const walker = document.createTreeWalker(codeEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent.length;
+      if (!started && pos + len > 0) {
+        range.setStart(node, 0);
+        started = true;
+      }
+      if (started && pos + len >= end) {
+        range.setEnd(node, end - pos);
+        try { CSS.highlights.set("burst-fragment-unapproved-paste", new Highlight(range)); } catch (e) {}
+        try {
+          const rects = range.getClientRects();
+          if (rects.length) {
+            const editor = $("editor");
+            const eb = editor.getBoundingClientRect();
+            const top = rects[0].top - eb.top + editor.scrollTop;
+            editor.scrollTo({ top: Math.max(0, top - 80), behavior: "smooth" });
+          }
+        } catch (e) {}
+        return;
+      }
+      pos += len;
+    }
+  });
 }
 
 /* =========================================================================

@@ -22,10 +22,14 @@ def add_common(sp: ArgumentParser) -> None:
     sp.add_argument("--exclude", nargs="*", default=[], help="List of file extensions to exclude (e.g. .html .md).")
     sp.add_argument("--approved-pastes", type=Path, help="Path to a file containing all approved fragments. E.g. given blocks of code")
     sp.add_argument("--problems", help="yaml file specifying which problems to include, e.g. by name. If omitted, includes all problems in the folder.")
+    sp.add_argument("--initial-char-limit", type=int, help="Flag recordings whose initial document exceeds this many characters.")
 
 
 def _handle_summary(args: Namespace) -> None:
-    sessions = load_sessions(args.recording_files, args.problems, args.approved_pastes, args.exclude)
+    sessions = load_sessions(
+        args.recording_files, args.problems, args.approved_pastes, args.exclude,
+        getattr(args, "initial_char_limit", None),
+    )
 
     if args.json:
         content = render_json(sessions)
@@ -66,7 +70,10 @@ def _handle_view(args: Namespace) -> None:
     if not recording_files:
         raise FileNotFoundError("No recording files matched the supplied paths or glob patterns.")
 
-    sessions = load_sessions(recording_files, args.problems, args.approved_pastes, args.exclude)
+    sessions = load_sessions(
+        recording_files, args.problems, args.approved_pastes, args.exclude,
+        getattr(args, "initial_char_limit", None),
+    )
 
     html_path = write_player_html(sessions, recording_files[0])
 
@@ -108,7 +115,10 @@ def _handle_stats(args: Namespace) -> None:
 
     submission_student_map = generate_submission_student_map(args.folder)
 
-    generate_stat_csvs(Path(args.folder), Path(args.output), args.problems, args.exclude, args.approved_pastes, submission_student_map)
+    generate_stat_csvs(
+        Path(args.folder), Path(args.output), args.problems, args.exclude,
+        args.approved_pastes, submission_student_map, getattr(args, "initial_char_limit", None),
+    )
 
 
 def _parse_stats(subparsers):

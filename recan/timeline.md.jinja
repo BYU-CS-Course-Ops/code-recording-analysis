@@ -1,4 +1,5 @@
 {%- set paste_entries = session.timeline | selectattr("kind", "equalto", "unapproved paste") | list -%}
+{%- set initial_entries = session.events | selectattr("type", "equalto", "initialSnapshot") | list -%}
 
 # **{{ session.document or "(unknown document)" }}**
 
@@ -8,6 +9,8 @@
 | **Ended**    | {{ format_ts(session.end_time) }}         |
 | **Duration** | {{ format_duration(session.total_time) }} |
 | **Language** | {{ session.language }}                    |
+| **Initial characters** | {{ len(session.initial_document) }}       |
+| **Initial character limit exceeded** | {{ "Yes" if session.initial_char_limit_exceeded else "No" }} |
 
 ## Summary
 
@@ -20,6 +23,25 @@
 | Approved pastes       | {{ session.total_approved_pastes }}                 |
 | Internal pastes       | {{ session.total_internal_pastes }}                 |
 | **Unapproved pastes** | **{{ session.total_unapproved_pastes }}**           |
+| Initial characters | {{ len(session.initial_document) }}                 |
+| Initial limit exceeded | {{ "Yes" if session.initial_char_limit_exceeded else "No" }} |
+
+## Initial content
+
+{% if not initial_entries -%}
+*No initial content recorded.*
+{%- else -%}
+{% for entry in initial_entries %}
+### {{ entry.timestamp }}
+
+`{{ len(entry.document_text) }} character{{ "s" if len(entry.document_text) != 1 else "" }}`
+
+```{{ session.language }}
+{{ entry.document_text }}
+```
+
+{% endfor -%}
+{%- endif %}
 
 ## Unapproved pastes
 

@@ -4,6 +4,7 @@ import json
 from recan.session import analyze_events
 from recan.utils import _load_recording
 from recan.viewer import _to_session_bundle
+from recan.formaters import render_markdown
 
 
 def _event(timestamp: str, offset: int, old: str, new: str) -> dict:
@@ -29,12 +30,30 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
     assert session["initial_document"] == initial
     assert session["total_edits"] == 1
     assert session["total_chars"] == len("answer = 42\n")
-    assert len(session["events"]) == 1
+    assert len(session["events"]) == 2
+    assert session["events"][0] == {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "type": "initialSnapshot",
+        "document_text": initial,
+    }
     assert session["idle_gaps"] == []
     assert session["snapshots"][-1]["document_text"] == "answer = 42\n"
 
     bundle = _to_session_bundle(session)
     assert bundle["initial_document"] == initial
+
+    summary = render_markdown([session])
+    assert "## Initial content" in summary
+    assert initial in summary
+
+
+def test_initial_character_limit_flags_only_when_exceeded():
+    initial = "answer = 41\n"
+    events = [_event("2026-01-01T00:00:00Z", 0, initial, initial)]
+
+    assert not analyze_events(events, initial_char_limit=len(initial))["initial_char_limit_exceeded"]
+    assert analyze_events(events, initial_char_limit=len(initial) - 1)["initial_char_limit_exceeded"]
+    assert not analyze_events(events)["initial_char_limit_exceeded"]
 
 
 def test_recording_loader_preserves_initial_snapshot(tmp_path):

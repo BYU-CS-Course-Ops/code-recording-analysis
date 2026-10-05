@@ -25,6 +25,7 @@ def _to_session_bundle(session: Session) -> dict:
         "document":                session["document"],
         "language":                session["language"],
         "initial_document":        session.get("initial_document", ""),
+        "initial_char_limit_exceeded": session.get("initial_char_limit_exceeded", False),
         "start_time":              _iso_z(session["start_time"]),
         "end_time":                _iso_z(session["end_time"]),
         "total_time":              session["total_time"],

@@ -75,6 +75,7 @@ class _SessionState:
     edit_count: int = 0
     total_typing_chars: int = 0
     total_deleted_chars: int = 0
+    initial_char_limit_exceeded: bool = False
     last_typed_ts: datetime | None = None
     focused: bool = True
 
@@ -232,7 +233,11 @@ def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
 
     if state.prev_ts is not None:
         gap_seconds = (ts - state.prev_ts).total_seconds()
-        if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS and state.events:
+        if (
+            gap_seconds > IDLE_GAP_THRESHOLD_SECONDS
+            and state.events
+            and state.events[-1].get("type") != "initialSnapshot"
+        ):
             idle_gap: IdleGap = {
                 "after_idx": len(state.events) - 1,
                 "duration": gap_seconds,
@@ -521,6 +526,7 @@ def _build_session(state: _SessionState) -> Session:
         "total_internal_pastes": totals["internal paste"],
         "total_ide_actions": totals["ide_action"],
         "total_generated_events": sum(totals.values()),
+        "initial_char_limit_exceeded": state.initial_char_limit_exceeded,
         "events": state.events,
         "focus_intervals": state.focus_intervals,
         "idle_gaps": state.idle_gaps,
@@ -534,6 +540,7 @@ def analyze_events(
         events: list[dict],
         matchers: Sequence[DocumentMatcher] = (),
         approved_pastes: str | None = None,
+        initial_char_limit: int | None = None,
 ) -> Session:
     """
     Walk a sequence of recording events and return a fully-populated Session.
@@ -559,6 +566,13 @@ def analyze_events(
 
         if _is_initial_snapshot(event, event_idx):
             _initialize_from_snapshot(event, state)
+            state.events.append({
+                "timestamp": event["timestamp"],
+                "type": "initialSnapshot",
+                "document_text": state.initial_document,
+            })
+            if initial_char_limit is not None:
+                state.initial_char_limit_exceeded = len(state.initial_document) > initial_char_limit
             continue
 
         kind = _event_kind(event)
@@ -587,7 +601,7 @@ def analyze_events(
 
 
 def load_sessions(recording_files: list[Path], problems: Path, approved_pastes_path: Path | None,
-                  excluded_file_types: list[str]) -> list[Session]:
+                  excluded_file_types: list[str], initial_char_limit: int | None = None) -> list[Session]:
     """
     Load and analyze every recording matched by `recording_files`, one Session each.
 
@@ -605,6 +619,6 @@ def load_sessions(recording_files: list[Path], problems: Path, approved_pastes_p
     matchers = [build_matcher(events) for _, events in recordings]
 
     return [
-        analyze_events(events, matchers, approved_pastes)
+        analyze_events(events, matchers, approved_pastes, initial_char_limit)
         for _, events in recordings
     ]
