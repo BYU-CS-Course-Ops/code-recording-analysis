@@ -37,6 +37,7 @@ Every subcommand accepts the same set of recording-filtering options:
 | `--exclude .ext1 .ext2 …`        | File extensions to ignore (e.g. `--exclude .html .md`). Events whose `document` ends in any listed extension are dropped.                                                                                                        |
 | `--approved-pastes approved.txt` | Path to a file of approved fragments (e.g. starter code, scaffolding given to students). Matching pastes are classified as `approved` rather than `unapproved`.                                                                  |
 | `--problems problems.yaml`       | YAML list of problem names to include. A recording is kept only if its filename (before the first `.`) matches an entry. Omit to include everything. See [`samples/problems_to_analyze.yaml`](samples/problems_to_analyze.yaml). |
+| `--initial-char-limit N`         | Flag recordings whose initial document contains more than `N` characters. Applies to `summary`, `view`, and `stats`. |
 
 Recording paths are positional and may be:
 
@@ -110,7 +111,7 @@ The CSV includes: `assignment`, `submission`, `problem`, `student_id`,
 `student_email`, `start_time`, `end_time`, `total_time`, `time_focused`,
 `time_unfocused`, `num_unfocused_events`, `num_ide_actions`,
 `num_unapproved_pastes`, `num_approved_pastes`, `num_internal_pastes`,
-`num_edits`, `num_chars`, `num_initial_chars`.
+`num_edits`, `num_chars`, `num_initial_chars`, `initial_char_limit_exceeded`.
 
 **Example**
 

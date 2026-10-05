@@ -37,6 +37,15 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
     assert bundle["initial_document"] == initial
 
 
+def test_initial_character_limit_flags_only_when_exceeded():
+    initial = "answer = 41\n"
+    events = [_event("2026-01-01T00:00:00Z", 0, initial, initial)]
+
+    assert not analyze_events(events, initial_char_limit=len(initial))["initial_char_limit_exceeded"]
+    assert analyze_events(events, initial_char_limit=len(initial) - 1)["initial_char_limit_exceeded"]
+    assert not analyze_events(events)["initial_char_limit_exceeded"]
+
+
 def test_recording_loader_preserves_initial_snapshot(tmp_path):
     initial = "answer = 41\n"
     events = [

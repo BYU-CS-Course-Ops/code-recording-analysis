@@ -1254,6 +1254,12 @@ button { font: inherit; color: inherit; }
   border-color: color-mix(in oklab, var(--unfocused) 30%, transparent);
   color: var(--unfocused);
 }
+.flag-group.initial-char-limit > summary { color: var(--unapproved); }
+.flag-group.initial-char-limit .fg-count {
+  background: var(--unapproved-soft);
+  border-color: color-mix(in oklab, var(--unapproved) 30%, transparent);
+  color: var(--unapproved);
+}
 .flag-group-body {
   display: flex;
   flex-direction: column;
@@ -1337,6 +1343,7 @@ button { font: inherit; color: inherit; }
 .flag.internal-paste   { border-left-color: var(--internal); }
 .flag.ide-action { border-left-color: var(--ide-action); }
 .flag.unfocused  { border-left-color: var(--unfocused); }
+.flag.initial-char-limit { border-left-color: var(--unapproved); }
 .flag.ok         { border-left-color: var(--ok); }
 
 .flag-icon {
@@ -1356,6 +1363,7 @@ button { font: inherit; color: inherit; }
 .flag.internal-paste   .flag-icon { background: var(--internal-soft);   color: var(--internal); }
 .flag.ide-action .flag-icon { background: var(--ide-action-soft); color: var(--ide-action); }
 .flag.unfocused  .flag-icon { background: var(--unfocused-soft);  color: var(--unfocused); }
+.flag.initial-char-limit .flag-icon { background: var(--unapproved-soft); color: var(--unapproved); }
 .flag.ok         .flag-icon { background: color-mix(in oklab, var(--ok) 15%, transparent); color: var(--ok); }
 
 .flag-body { flex: 1; min-width: 0; }
