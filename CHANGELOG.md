@@ -1,10 +1,11 @@
 # Changelog
 
-All notable changes are documented here.
+## 0.2.17
 
-## [Unreleased]
+- Flag excessive initial content with `--initial-char-limit <n>`
+- Minor adjustments to `view` UI
 
-## [0.2.15]
+## 0.2.15
 
 ### Changed
 
