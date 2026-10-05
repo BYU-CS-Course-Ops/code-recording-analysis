@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 
 # Build / packaging
@@ -9,6 +10,7 @@ poetry.lock
 
 # IDE / editor
 .idea/
+.vscode
 
 # OS
 .DS_Store
@@ -30,3 +32,7 @@ claude-design
 w26-final-analysis/
 /samples/
 *.csv
+
+# Personal
+# .gitignore
+/reconstruct-fix/

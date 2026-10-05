@@ -7,7 +7,7 @@ from .formaters import render_json, render_markdown
 from .viewer import write_player_html
 from .stats import generate_stat_csvs
 from .session import load_sessions
-from .utils import is_gradescope_export, generate_submission_student_map, generate_problem_set
+from .utils import _get_recordings, is_gradescope_export, generate_submission_student_map
 
 
 def add_common(sp: ArgumentParser) -> None:
@@ -62,9 +62,13 @@ def _parse_summary(subparsers):
 
 
 def _handle_view(args: Namespace) -> None:
-    sessions = load_sessions(args.recording_files, args.problems, args.approved_pastes, args.exclude)
+    recording_files = _get_recordings(args.recording_files)
+    if not recording_files:
+        raise FileNotFoundError("No recording files matched the supplied paths or glob patterns.")
 
-    html_path = write_player_html(sessions, args.recording_files[0])
+    sessions = load_sessions(recording_files, args.problems, args.approved_pastes, args.exclude)
+
+    html_path = write_player_html(sessions, recording_files[0])
 
     if args.auto_open:
         webbrowser.open(html_path.resolve().as_uri())
@@ -78,7 +82,7 @@ def _parse_view(subparsers):
                 <recording_file(s)>                                          - Required
                 [--exclude .ext1 .ext2 ...]                                  - Optional
                 [--approved-pastes approved.txt]                             - Optional
-                [--auto-open]`                                               - Optional (defaults to false)
+                [--no-open]`                                                 - Optional
     """
     view = subparsers.add_parser("view", help="Generate a self-contained HTML player for a recording.")
 
@@ -86,7 +90,13 @@ def _parse_view(subparsers):
 
     add_common(view)
 
-    view.add_argument("--auto-open", action="store_true", help="Open the generated HTML in the default web browser (default: false).")
+    view.add_argument(
+        "--no-open",
+        dest="auto_open",
+        action="store_false",
+        default=True,
+        help="Write the generated HTML without opening it in a browser.",
+    )
 
     view.set_defaults(func=_handle_view)
 

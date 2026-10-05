@@ -60,8 +60,10 @@ class _SessionState:
     bursts: list[Burst] = field(default_factory=list)
     timeline: list[TimelineEntry] = field(default_factory=list)
     cluster: _Cluster = field(default_factory=_Cluster)
+    initial_document: str = ""
     document: str = ""
     document_name: str = ""
+    document_filename: str = ""
     blur_idx: int | None = None
     blur_ts: datetime | None = None
     prev_ts: datetime | None = None
@@ -94,6 +96,29 @@ def _event_kind(event: dict) -> str:
         return "edit"
 
     return "unknown"
+
+
+def _is_initial_snapshot(event: dict, event_idx: int) -> bool:
+    """Whether an event is the recorder's non-edit initial document snapshot."""
+    return (
+        event_idx == 0
+        and _event_kind(event) == "edit"
+        and event.get("offset", 0) == 0
+        and event.get("oldFragment") == event.get("newFragment")
+    )
+
+
+def _initialize_from_snapshot(event: dict, state: _SessionState) -> None:
+    """Seed reconstruction from the recorder snapshot without counting an edit."""
+    document = event.get("newFragment", "")
+    state.initial_document = document
+    state.document = document
+
+    doc = event.get("document", "")
+    if doc:
+        document_name = PureWindowsPath(doc).name
+        state.document_filename = document_name
+        state.document_name = Path(document_name).stem
 
 
 def _is_generated_edit(event: dict) -> bool:
@@ -207,7 +232,7 @@ def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
 
     if state.prev_ts is not None:
         gap_seconds = (ts - state.prev_ts).total_seconds()
-        if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS:
+        if gap_seconds > IDLE_GAP_THRESHOLD_SECONDS and state.events:
             idle_gap: IdleGap = {
                 "after_idx": len(state.events) - 1,
                 "duration": gap_seconds,
@@ -274,7 +299,9 @@ def _accum_typing_time(state: _SessionState, ts: datetime, is_generated: bool) -
         return
 
     if state.last_typed_ts is not None:
-        state.total_time_typing += (ts - state.last_typed_ts).total_seconds()
+        elapsed = (ts - state.last_typed_ts).total_seconds()
+        if 0 <= elapsed <= IDLE_GAP_THRESHOLD_SECONDS:
+            state.total_time_typing += elapsed
 
     state.last_typed_ts = ts
 
@@ -297,6 +324,7 @@ def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
     if not state.document_name:
         # Get the stem of the document path as the document name, need to handle both windows and unix paths
         document_name = PureWindowsPath(doc).name
+        state.document_filename = document_name
         document_name = Path(document_name).stem
         state.document_name = document_name
 
@@ -476,7 +504,8 @@ def _build_session(state: _SessionState) -> Session:
 
     return {
         "document": state.document_name,
-        "language": language_from_extension(state.document_name, state.document),
+        "language": language_from_extension(state.document_filename, state.document),
+        "initial_document": state.initial_document,
         "start_time": state.start_time,
         "end_time": state.end_time,
         "total_time": total_time,
@@ -524,9 +553,14 @@ def analyze_events(
     """
     state = _SessionState()
 
-    for event in events:
+    for event_idx, event in enumerate(events):
         ts = parse_ts(event["timestamp"])
         _record_idle_gap(state, ts)
+
+        if _is_initial_snapshot(event, event_idx):
+            _initialize_from_snapshot(event, state)
+            continue
+
         kind = _event_kind(event)
 
         if kind == "focusStatus":

@@ -2,21 +2,23 @@ import re
 from datetime import datetime
 from typing import Literal, TypedDict
 
-# Matches an IDE-completed function stub, e.g.:
+# Matches a complete IDE function-stub fragment, with optional trailing blank lines:
 #   def foo():\n    pass
 #   def foo(a, b):\n    pass
 #   def foo(a: int) -> str:\n    pass
 #   def foo():\n        (cursor sits on indented empty line)
 CREATE_FUNCTION_PATTERN = re.compile(
-    r'^[ \t]*def\s+\w+\s*\([^)]*\)\s*(?:->\s*[^:]+?)?\s*:[ \t]*\n[ \t]+(?:pass\b|\.\.\.|$)',
+    r'^[ \t]*def[ \t]+\w+[ \t]*\([^\r\n)]*\)[ \t]*(?:->[ \t]*[^:\r\n]+?)?[ \t]*:'
+    r'[ \t]*\r?\n[ \t]+(?:(?:pass|\.\.\.)[ \t]*)?(?:\r?\n[ \t]*)*\Z',
     re.MULTILINE,
 )
 
-# Matches the IDE-completed main guard, e.g.:
-#   if __name__ == "__main__":\n
+# Matches the complete IDE main guard, with indentation alone or a main() call:
+#   if __name__ == "__main__":\n        (cursor on an indented empty line)
 #   if __name__ == '__main__':\n        main()
 MAIN_BLOCK_PATTERN = re.compile(
-    r'^[ \t]*if\s+__name__\s*==\s*[\'"]__main__[\'"]\s*:[ \t]*\n[ \t]+',
+    r'^[ \t]*if[ \t]+__name__[ \t]*==[ \t]*(?P<quote>[\'"])__main__(?P=quote)[ \t]*:'
+    r'[ \t]*\r?\n[ \t]+(?:main[ \t]*\([ \t]*\)[ \t]*)?(?:\r?\n[ \t]*)*\Z',
     re.MULTILINE,
 )
 
@@ -78,6 +80,7 @@ class TimelineEntry(TypedDict, total=False):
 class Session(TypedDict):
     document: str
     language: str
+    initial_document: str
     start_time: datetime
     end_time: datetime
     total_time: float

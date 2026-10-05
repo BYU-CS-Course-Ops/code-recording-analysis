@@ -75,13 +75,13 @@ open it directly, no server required. You can scrub the timeline, jump between b
 document state at any point.
 
 ```bash
-recan view <recording_file(s)> [common args] [--auto-open]
+recan view <recording_file(s)> [common args] [--no-open]
 ```
 
 | Flag              | Description                                                     |
 |-------------------|-----------------------------------------------------------------|
 | `recording_files` | One or more recording files or glob patterns (required).        |
-| `--auto-open`     | Open the generated HTML in the default browser (on by default). |
+| `--no-open`       | Write the player without opening it in a browser.                 |
 
 **Example**
 
@@ -94,7 +94,7 @@ recan view samples/session.jsonl.gz --exclude .html
 ### `stats`
 
 Walk a Gradescope export folder and write a single CSV with one row per
-submission. The folder is expected to contain a `submission_metadata.yml`
+recording in each submission. The folder is expected to contain a `submission_metadata.yml`
 plus per-submission subdirectories holding the recording `.jsonl.gz` files.
 
 ```bash
@@ -134,8 +134,27 @@ recan stats samples/assignment_7360081_export out.csv \
 - **IDE actions** — tightly-grouped bursts of generated edits (e.g. PyCharm "generate constructor", VS Code snippet
   expansion), distinguished from pastes by burst shape.
 - **Idle gaps** — pauses between events longer than the idle threshold.
-- **Move detection** — a paste that's later deleted, or a delete that reappears as a paste, is treated as a move and not
-  double-counted.
+
+## Development
+
+Install the project and development dependencies with `poetry install`, then run
+`poetry run python -m pytest -q`. Tests use synthetic recordings and need no private sample files.
+Pytest plugin autoload is disabled to prevent unrelated globally installed plugins from changing the suite.
+The suite is grouped by behavior under `tests/matcher`, `tests/session`,
+`tests/ide-actions`, and `tests/browser`; cross-cutting regressions live at the test root.
+
+The optional browser tests run the generated player in headless Chromium:
+
+```bash
+poetry install --with browser
+poetry run playwright install chromium
+poetry run python -m pytest -q
+```
+
+Without Playwright or its Chromium installation, the browser tests are skipped.
+The remaining tests still run normally.
+
+See [MAINTENANCE.md](MAINTENANCE.md) for cleanup details and remaining review findings.
 
 ## Authors
 

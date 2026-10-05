@@ -1,7 +1,7 @@
 """Unit tests for the timestamp-keyed gate on DocumentMatcher.
 
-These exercise `_before_pos_at` directly and `_contains` through its new
-`ts` parameter. Cross-matcher behavior lives in test_cross_matcher_resolve.py.
+These exercise `_before_pos_at` directly and `contains` through its
+`ts` parameter. Cross-matcher behavior lives in test_cross_matcher.py.
 """
 
 from datetime import datetime, timedelta
@@ -27,7 +27,7 @@ def test_before_pos_at_empty_history_returns_zero():
 
 def test_before_pos_at_ts_strictly_before_first_snapshot_returns_zero():
     m = DocumentMatcher()
-    m.apply_edit(0, "", "hello", is_generated=False, ts=_ts(1000))
+    m.apply_edit(0, "", "hello", ts=_ts(1000))
     assert m._before_pos_at(_ts(500)) == 0
 
 
@@ -38,9 +38,9 @@ def test_before_pos_at_ts_equals_snapshot_returns_prior_snapshots_end():
     as its own snapshot, and we want that snapshot excluded from the search.
     """
     m = DocumentMatcher()
-    m.apply_edit(0, "", "aaa", is_generated=False, ts=_ts(100))
+    m.apply_edit(0, "", "aaa", ts=_ts(100))
     end_at_100 = len(m._history_bytes)
-    m.apply_edit(3, "", "bbb", is_generated=False, ts=_ts(200))
+    m.apply_edit(3, "", "bbb", ts=_ts(200))
     # ts == 100 excludes the snapshot at 100; only snapshots strictly before
     # 100 count, and there are none.
     assert m._before_pos_at(_ts(100)) == 0
@@ -50,8 +50,8 @@ def test_before_pos_at_ts_equals_snapshot_returns_prior_snapshots_end():
 
 def test_before_pos_at_ts_strictly_after_last_returns_last_end():
     m = DocumentMatcher()
-    m.apply_edit(0, "", "aaa", is_generated=False, ts=_ts(100))
-    m.apply_edit(3, "", "bbb", is_generated=False, ts=_ts(200))
+    m.apply_edit(0, "", "aaa", ts=_ts(100))
+    m.apply_edit(3, "", "bbb", ts=_ts(200))
     last_end = len(m._history_bytes)
     assert m._before_pos_at(_ts(9999)) == last_end
 
@@ -61,8 +61,8 @@ def test_before_pos_at_duplicate_timestamps_excludes_all_at_that_ts():
     as "before" that millisecond. Without a prior snapshot, the cutoff is 0.
     """
     m = DocumentMatcher()
-    m.apply_edit(0, "", "aaa", is_generated=False, ts=_ts(100))
-    m.apply_edit(3, "", "bbb", is_generated=False, ts=_ts(100))
+    m.apply_edit(0, "", "aaa", ts=_ts(100))
+    m.apply_edit(3, "", "bbb", ts=_ts(100))
     assert m._before_pos_at(_ts(100)) == 0
 
 
@@ -70,39 +70,39 @@ def test_before_pos_at_duplicate_timestamps_excludes_all_at_that_ts():
 
 def test_contains_finds_past_fragment():
     m = DocumentMatcher()
-    m.apply_edit(0, "", "def main():\n    pass", is_generated=False, ts=_ts(100))
+    m.apply_edit(0, "", "def main():\n    pass", ts=_ts(100))
     m.finalize()
-    assert m._contains("def main", _ts(200)) is True
+    assert m.contains("def main", _ts(200)) is True
 
 
 def test_contains_rejects_future_fragment():
     """Fragment present only in a snapshot whose ts > query ts is not found."""
     m = DocumentMatcher()
-    m.apply_edit(0, "", "before", is_generated=False, ts=_ts(100))
-    m.apply_edit(6, "", "_after_fragment", is_generated=False, ts=_ts(500))
+    m.apply_edit(0, "", "before", ts=_ts(100))
+    m.apply_edit(6, "", "_after_fragment", ts=_ts(500))
     m.finalize()
-    assert m._contains("_after_fragment", _ts(200)) is False
+    assert m.contains("_after_fragment", _ts(200)) is False
 
 
 def test_contains_empty_fragment_returns_false():
     m = DocumentMatcher()
-    m.apply_edit(0, "", "hello", is_generated=False, ts=_ts(100))
+    m.apply_edit(0, "", "hello", ts=_ts(100))
     m.finalize()
-    assert m._contains("", _ts(200)) is False
+    assert m.contains("", _ts(200)) is False
 
 
 def test_contains_sentinel_prevents_match_spanning_snapshots():
     """Sentinel guarantee: a fragment that would only exist by crossing the
     boundary between snapshots must not match."""
     m = DocumentMatcher()
-    m.apply_edit(0, "", "abc", is_generated=False, ts=_ts(100))
-    m.apply_edit(0, "abc", "xyz", is_generated=False, ts=_ts(200))
+    m.apply_edit(0, "", "abc", ts=_ts(100))
+    m.apply_edit(0, "abc", "xyz", ts=_ts(200))
     m.finalize()
-    assert m._contains("cx", _ts(300)) is False
+    assert m.contains("cx", _ts(300)) is False
 
 
 def test_contains_before_finalize_raises():
     m = DocumentMatcher()
-    m.apply_edit(0, "", "hello", is_generated=False, ts=_ts(100))
+    m.apply_edit(0, "", "hello", ts=_ts(100))
     with pytest.raises(RuntimeError):
-        m._contains("hello", _ts(200))
+        m.contains("hello", _ts(200))
