@@ -29,6 +29,7 @@ claude-design
 *.jsonl
 *.md
 !CHANGELOG.md
+!.agents/remember/*.md
 w26-final-analysis/
 /samples/
 *.csv

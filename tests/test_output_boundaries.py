@@ -28,9 +28,8 @@ def _session(*, initial="typed\n", starter_code=None):
 def test_markdown_starter_mismatch_is_false_only_and_separated(starter_code, expected):
     markdown = render_markdown([_session(starter_code=starter_code)])
 
-    assert markdown.count("Starter-code mismatch") == (2 if expected is False else 0)
+    assert markdown.count("Starter-code mismatch") == (1 if expected is False else 0)
     if expected is False:
-        assert "| **Starter-code mismatch** | **Yes** |\n\n## Summary" in markdown
         assert "| Starter-code mismatch | Yes |\n\n## Initial content" in markdown
     assert "\n\n## Summary" in markdown
     assert "\n\n## Initial content" in markdown

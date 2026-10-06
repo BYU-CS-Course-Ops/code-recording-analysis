@@ -9,9 +9,6 @@
 | **Ended**    | {{ format_ts(session.end_time) }}         |
 | **Duration** | {{ format_duration(session.total_time) }} |
 | **Language** | {{ session.language }}                    |
-{% if session.starts_with_starter_code is false %}
-| **Starter-code mismatch** | **Yes** |
-{% endif %}
 
 ## Summary
 
