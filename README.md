@@ -37,7 +37,7 @@ Every subcommand accepts the same set of recording-filtering options:
 | `--exclude .ext1 .ext2 …`        | File extensions to ignore (e.g. `--exclude .html .md`). Events whose `document` ends in any listed extension are dropped.                                                                                                        |
 | `--approved-pastes approved.txt` | Path to a file of approved fragments (e.g. starter code, scaffolding given to students). Matching pastes are classified as `approved` rather than `unapproved`.                                                                  |
 | `--problems problems.yaml`       | YAML list of problem names to include. A recording is kept only if its filename (before the first `.`) matches an entry. Omit to include everything. See [`samples/problems_to_analyze.yaml`](samples/problems_to_analyze.yaml). |
-| `--starter-code FILE …`          | Supply starter files. Each recording is matched by exact basename (including Windows document paths); a mismatch is flagged. Files are also approved paste sources. |
+| `--starter-code [FILE …]`         | Optionally supply starter files. Each recording is matched by exact basename (including Windows document paths); a mismatch is flagged. Files are also approved paste sources. With no files, the value is an empty list. |
 
 Recording paths are positional and may be:
 

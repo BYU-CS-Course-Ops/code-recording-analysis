@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.19
+
+- Support an empty list to `--starter-code` so expressions like `--starter-code code/*.py` don't fail when there are no files matched by the glob. 
+
 ## 0.2.18
 
 - Add `--starter-code <1 or more files>` to all commands. Recordings are expected to start with the corresponding content; if a recording does not, it is flagged.
