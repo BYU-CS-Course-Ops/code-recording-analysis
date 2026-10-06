@@ -22,8 +22,8 @@ def add_common(sp: ArgumentParser) -> None:
     sp.add_argument("--exclude", nargs="*", default=[], help="List of file extensions to exclude (e.g. .html .md).")
     sp.add_argument("--approved-pastes", type=Path, help="Path to a file containing all approved fragments. E.g. given blocks of code")
     sp.add_argument("--problems", help="yaml file specifying which problems to include, e.g. by name. If omitted, includes all problems in the folder.")
-    sp.add_argument("--starter-code", type=Path, nargs="+", metavar="FILE",
-                    help="Starter-code files; matched to recordings by exact basename.")
+    sp.add_argument("--starter-code", type=Path, nargs="*", default=[], metavar="FILE",
+                    help="Optional starter-code files; matched to recordings by exact basename.")
 
 
 def _handle_summary(args: Namespace) -> None:

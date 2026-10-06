@@ -24,6 +24,16 @@ def test_starter_code_accepts_multiple_files():
     assert args.starter_code == [Path("template.py"), Path("helpers.py")]
 
 
+def test_starter_code_without_files_defaults_to_empty_list():
+    args = parser().parse_args(["--starter-code"])
+    assert args.starter_code == []
+
+
+def test_starter_code_when_omitted_defaults_to_empty_list():
+    args = parser().parse_args([])
+    assert args.starter_code == []
+
+
 @pytest.mark.parametrize(
     ("parse_command", "command_args"),
     [
