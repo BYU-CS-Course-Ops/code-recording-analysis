@@ -75,7 +75,7 @@ class _SessionState:
     edit_count: int = 0
     total_typing_chars: int = 0
     total_deleted_chars: int = 0
-    initial_char_limit_exceeded: bool = False
+    starts_with_starter_code: bool | None = None
     last_typed_ts: datetime | None = None
     focused: bool = True
 
@@ -196,7 +196,7 @@ def _is_ide_action(event: dict) -> bool:
     return False
 
 
-def _is_approved_paste(event: dict, approved_pastes: str | None) -> bool:
+def _is_approved_paste(event: dict, approved_pastes: Sequence[str]) -> bool:
     """
     Heuristic for "this generated edit matches a fragment in the approved-fragments file."
 
@@ -207,19 +207,32 @@ def _is_approved_paste(event: dict, approved_pastes: str | None) -> bool:
     if not approved_pastes:
         return False
 
-    fragment = event.get("newFragment", "")
-    return normalize_newlines(fragment) in approved_pastes
+    fragment = normalize_newlines(event.get("newFragment", ""))
+    # Check each source independently: an approved match may not span files.
+    return any(fragment in source for source in approved_pastes)
 
 
-def _load_approved_pastes(approved_pastes_path: Path | None) -> str | None:
+def _load_approved_pastes(approved_pastes_path: Path | None) -> list[str]:
     if not approved_pastes_path:
-        return ''
+        return []
+    path = Path(approved_pastes_path)
+    if not path.is_file():
+        return []
+    return [normalize_newlines(path.read_text(encoding="utf-8"))]
 
-    approved_pastes_path = Path(approved_pastes_path)
-    if approved_pastes_path.is_file():
-        return normalize_newlines(approved_pastes_path.read_text())
 
-    return ''
+def _load_starter_code(paths: Sequence[Path] | None) -> dict[str, str]:
+    starters: dict[str, str] = {}
+    for raw_path in paths or ():
+        path = Path(raw_path)
+        basename = PureWindowsPath(path.name).name
+        if basename in starters:
+            raise ValueError(f"Duplicate starter-code basename: {basename}")
+        try:
+            starters[basename] = normalize_newlines(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as exc:
+            raise ValueError(f"Could not read starter-code file {path}: {exc}") from exc
+    return starters
 
 
 def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
@@ -386,7 +399,7 @@ def _classify_cluster(
         cluster: _Cluster,
         canonical: dict,
         matchers: Sequence[DocumentMatcher],
-        approved_pastes: str | None,
+        approved_pastes: Sequence[str],
 ) -> str:
     """
     Pick a burst kind for the whole cluster.
@@ -417,7 +430,7 @@ def _classify_cluster(
 def _flush_cluster(
         state: _SessionState,
         matchers: Sequence[DocumentMatcher],
-        approved_pastes: str | None,
+        approved_pastes: Sequence[str],
 ) -> None:
     """
     Emit one burst spanning the in-flight cluster, then clear it.
@@ -526,7 +539,7 @@ def _build_session(state: _SessionState) -> Session:
         "total_internal_pastes": totals["internal paste"],
         "total_ide_actions": totals["ide_action"],
         "total_generated_events": sum(totals.values()),
-        "initial_char_limit_exceeded": state.initial_char_limit_exceeded,
+        "starts_with_starter_code": state.starts_with_starter_code,
         "events": state.events,
         "focus_intervals": state.focus_intervals,
         "idle_gaps": state.idle_gaps,
@@ -539,8 +552,8 @@ def _build_session(state: _SessionState) -> Session:
 def analyze_events(
         events: list[dict],
         matchers: Sequence[DocumentMatcher] = (),
-        approved_pastes: str | None = None,
-        initial_char_limit: int | None = None,
+        approved_pastes: Sequence[str] | str | None = None,
+        starter_code: dict[str, str] | None = None,
 ) -> Session:
     """
     Walk a sequence of recording events and return a fully-populated Session.
@@ -559,6 +572,13 @@ def analyze_events(
           timeline.
     """
     state = _SessionState()
+    # Normalize the legacy single-string form once. Keep a sequence through
+    # classification so sources remain independent and strings are not
+    # accidentally iterated character by character.
+    approved_sources: Sequence[str] = (
+        (approved_pastes,) if isinstance(approved_pastes, str)
+        else tuple(approved_pastes or ())
+    )
 
     for event_idx, event in enumerate(events):
         ts = parse_ts(event["timestamp"])
@@ -566,19 +586,23 @@ def analyze_events(
 
         if _is_initial_snapshot(event, event_idx):
             _initialize_from_snapshot(event, state)
+            if starter_code is not None:
+                starter = starter_code.get(state.document_filename)
+                state.starts_with_starter_code = (
+                    normalize_newlines(state.initial_document).startswith(normalize_newlines(starter))
+                    if starter is not None else None
+                )
             state.events.append({
                 "timestamp": event["timestamp"],
                 "type": "initialSnapshot",
                 "document_text": state.initial_document,
             })
-            if initial_char_limit is not None:
-                state.initial_char_limit_exceeded = len(state.initial_document) > initial_char_limit
             continue
 
         kind = _event_kind(event)
 
         if kind == "focusStatus":
-            _flush_cluster(state, matchers, approved_pastes)
+            _flush_cluster(state, matchers, approved_sources)
             _handle_focus(event, ts, state)
             continue
 
@@ -586,22 +610,26 @@ def analyze_events(
             continue
 
         if not state.cluster.is_empty and (ts - state.cluster.last_ts) > BURST_CLUSTER_WINDOW:
-            _flush_cluster(state, matchers, approved_pastes)
+            _flush_cluster(state, matchers, approved_sources)
 
         is_generated = _is_generated_edit(event)
         _accum_typing_time(state, ts, is_generated)
         _apply_edit(event, state, is_generated)
         _extend_cluster(state, event, ts, is_generated)
 
-    _flush_cluster(state, matchers, approved_pastes)
+    _flush_cluster(state, matchers, approved_sources)
     _finalize_snapshots(state)
     state.timeline.sort(key=lambda e: e["timestamp"])
+    if starter_code is not None and state.starts_with_starter_code is None:
+        state.starts_with_starter_code = (
+            False if state.document_filename in starter_code else None
+        )
 
     return _build_session(state)
 
 
 def load_sessions(recording_files: list[Path], problems: Path, approved_pastes_path: Path | None,
-                  excluded_file_types: list[str], initial_char_limit: int | None = None) -> list[Session]:
+                  excluded_file_types: list[str], starter_code_paths: Sequence[Path] | None = None) -> list[Session]:
     """
     Load and analyze every recording matched by `recording_files`, one Session each.
 
@@ -613,12 +641,15 @@ def load_sessions(recording_files: list[Path], problems: Path, approved_pastes_p
         - Analyze each recording, passing the full matcher list in.
     """
     approved_pastes = _load_approved_pastes(approved_pastes_path)
+    starters = _load_starter_code(starter_code_paths)
+    # Every starter is approved, even when no recording uses its basename.
+    approved_pastes.extend(starters.values())
 
     recordings = load_recordings(recording_files, problems, excluded_file_types)
 
     matchers = [build_matcher(events) for _, events in recordings]
 
     return [
-        analyze_events(events, matchers, approved_pastes, initial_char_limit)
+        analyze_events(events, matchers, approved_pastes, starters)
         for _, events in recordings
     ]

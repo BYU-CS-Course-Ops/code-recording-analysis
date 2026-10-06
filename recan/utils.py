@@ -198,12 +198,8 @@ def splice(doc: str, offset: int, old: str, new: str) -> str:
 
 
 def normalize_newlines(text, target='\n') -> str:
-    """
-    Normalize all newlines in the given text to the target newline character(s).
-
-    Used to ensure consistent handling of approved fragments across different platforms and editors.
-    """
-    return target.join(text.splitlines())
+    """Normalize CRLF and CR line endings without dropping trailing newlines."""
+    return text.replace('\r\n', '\n').replace('\r', '\n').replace('\n', target)
 
 
 def is_gradescope_export(folder: Path) -> bool:

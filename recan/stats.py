@@ -30,7 +30,7 @@ CSV_COLUMNS = [
     'num_typed_chars',
     'num_pasted_chars',
     'num_deleted_chars',
-    'initial_char_limit_exceeded',
+    'starts_with_starter_code',
     'time_typing',
 ]
 
@@ -82,7 +82,7 @@ def _row_from_session(submission, session_info: Session, student_id, student_ema
         'num_edits': session_info['total_edits'],
         'num_chars': session_info['total_chars'],
         'num_initial_chars': len(session_info['initial_document']),
-        'initial_char_limit_exceeded': session_info['initial_char_limit_exceeded'],
+        'starts_with_starter_code': session_info['starts_with_starter_code'],
         'num_typed_chars': session_info['total_typed_chars'],
         'num_pasted_chars': session_info['total_pasted_chars'],
         'num_deleted_chars': session_info['total_deleted_chars'],
@@ -118,7 +118,7 @@ def generate_stat_csvs(folder: Path, output_path: Path,
                        problems: Path, excluded_file_types: list[str],
                        approved_fragments_path: Path | None,
                        submission_student_map: dict[str, tuple[int, str]],
-                       initial_char_limit: int | None = None) -> None:
+                       starter_code_paths=None) -> None:
     stats: list[dict] = []
     excluded_count = 0
     unreadable: list[tuple[Path, str]] = []
@@ -129,7 +129,8 @@ def generate_stat_csvs(folder: Path, output_path: Path,
         recordings = Path(submission) / '*.jsonl.gz'
 
         sessions = load_sessions(
-            [recordings], problems, approved_fragments_path, excluded_file_types, initial_char_limit
+            [recordings], problems, approved_fragments_path, excluded_file_types,
+            starter_code_paths
         )
 
         student_id, student_email = submission_student_map.get(submission.name, (None, None))

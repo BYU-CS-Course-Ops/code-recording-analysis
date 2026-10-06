@@ -102,7 +102,7 @@ class Session(TypedDict):
     total_internal_pastes: int
     total_ide_actions: int
     total_generated_events: int
-    initial_char_limit_exceeded: bool
+    starts_with_starter_code: bool | None
 
     events: list[dict]
     focus_intervals: list[FocusInterval]
