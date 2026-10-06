@@ -10,7 +10,9 @@
 | **Duration** | {{ format_duration(session.total_time) }} |
 | **Language** | {{ session.language }}                    |
 | **Initial characters** | {{ len(session.initial_document) }}       |
-| **Initial character limit exceeded** | {{ "Yes" if session.initial_char_limit_exceeded else "No" }} |
+{% if session.starts_with_starter_code is false %}
+| **Starter-code mismatch** | **Yes** |
+{% endif %}
 
 ## Summary
 
@@ -24,7 +26,9 @@
 | Internal pastes       | {{ session.total_internal_pastes }}                 |
 | **Unapproved pastes** | **{{ session.total_unapproved_pastes }}**           |
 | Initial characters | {{ len(session.initial_document) }}                 |
-| Initial limit exceeded | {{ "Yes" if session.initial_char_limit_exceeded else "No" }} |
+{% if session.starts_with_starter_code is false %}
+| Starter-code mismatch | Yes |
+{% endif %}
 
 ## Initial content
 

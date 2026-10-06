@@ -53,6 +53,7 @@ function normalizeLegacy(b) {
     document: m.document,
     language: m.language,
     initial_document: b.initial_document || "",
+    starts_with_starter_code: b.starts_with_starter_code,
     start_time: m.start_time,
     end_time: m.end_time,
     total_time: s.total_seconds,
@@ -75,7 +76,8 @@ function normalizeSession(s) {
     document:               s.document               || "(unnamed)",
     language:               s.language               || "plaintext",
     initial_document:       s.initial_document       || "",
-    initial_char_limit_exceeded: Boolean(s.initial_char_limit_exceeded),
+    // Preserve the starter-code tri-state: true, false, and unknown (null).
+    starts_with_starter_code: s.starts_with_starter_code ?? null,
     start_time:             s.start_time,
     end_time:               s.end_time,
     total_time:             s.total_time             ?? 0,
@@ -277,14 +279,12 @@ function buildGlobalState(rawSessions) {
     acc.approved_paste_count   += s.total_approved_pastes;
     acc.internal_paste_count   += s.total_internal_pastes;
     acc.unapproved_paste_count += s.total_unapproved_pastes;
-    acc.initial_char_limit_exceeded_count += s.initial_char_limit_exceeded ? 1 : 0;
     acc.unfocused_seconds      += s.total_time_unfocused;
     acc.total_seconds          += s.total_time;
     return acc;
   }, {
     edit_count: 0, ide_action_count: 0, approved_paste_count: 0,
     internal_paste_count: 0, unapproved_paste_count: 0,
-    initial_char_limit_exceeded_count: 0,
     unfocused_seconds: 0, total_seconds: 0,
   });
 
@@ -723,7 +723,7 @@ function renderStatsSidebar() {
     const n = basename(s.document);
     const flags = s.total_ide_actions + s.total_approved_pastes
                 + s.total_internal_pastes + s.total_unapproved_pastes
-                + (s.initial_char_limit_exceeded ? 1 : 0);
+                + (s.starts_with_starter_code === false ? 1 : 0);
     return `
       <button class="session-row" data-session="${i}" title="${escapeHtml(s.document)}">
         <span class="session-row-dot tab-dot ${escapeHtml(langTabDotClass(resolveSessionLanguage(s)))}"></span>
@@ -771,11 +771,6 @@ function renderStatsSidebar() {
           <span class="stat-label">Unapproved pastes</span>
           <span class="stat-value">${sum.unapproved_paste_count}</span>
         </div>
-        <div class="stat">
-          <span class="stat-label">Initial character limit</span>
-          <span class="stat-value">${sum.initial_char_limit_exceeded_count}</span>
-          <span class="delta">recordings exceeded</span>
-        </div>
       </div>
     </div>
     ${STATE.sessions.length > 1 ? `
@@ -784,7 +779,7 @@ function renderStatsSidebar() {
       <div class="session-list">${sessionList}</div>
     </div>` : ""}
     <div class="stats-section">
-      <div class="stats-section-title">Key moments <span style="color:var(--fg-subtle);font-weight:500;letter-spacing:0">${STATE.bursts.length + STATE.focusIntervals.length + STATE.sessions.filter(s => s.initial_char_limit_exceeded).length}</span></div>
+      <div class="stats-section-title">Key moments <span style="color:var(--fg-subtle);font-weight:500;letter-spacing:0">${STATE.bursts.length + STATE.focusIntervals.length + STATE.sessions.filter(s => s.starts_with_starter_code === false).length}</span></div>
       <div class="flags" id="flags-list"></div>
     </div>
   `;
@@ -810,7 +805,7 @@ function renderFlagsList() {
     "internal paste":   { kind: "internal paste",    cssKind: "internal-paste",   label: "Internal pastes",   icon: "↻", items: [] },
     "unapproved paste": { kind: "unapproved paste",  cssKind: "unapproved-paste", label: "Unapproved pastes", icon: "!", items: [] },
     unfocused:          { kind: "unfocused",         cssKind: "unfocused",        label: "Unfocused",          icon: "↗", items: [] },
-    initial_char_limit: { kind: "initial_char_limit", cssKind: "initial-char-limit", label: "Initial character limit", icon: "!", items: [] },
+    starter_mismatch:   { kind: "starter_mismatch", cssKind: "starter-mismatch", label: "Starter-code mismatch", icon: "!", items: [] },
   };
 
   const counters = { ide_action: 0, "approved paste": 0, "internal paste": 0, "unapproved paste": 0 };
@@ -838,14 +833,14 @@ function renderFlagsList() {
   });
 
   STATE.sessions.forEach((s, i) => {
-    if (!s.initial_char_limit_exceeded) return;
+    if (s.starts_with_starter_code !== false) return;
     const idx = STATE.localToGlobal[i]?.[0] ?? -1;
     const startT = s.start_time;
     const elapsed = (Date.parse(startT || STATE.meta.start_time) - Date.parse(STATE.meta.start_time)) / 1000;
     const docName = basename(s.document);
     const docSuffix = STATE.sessions.length > 1 ? ` · ${docName}` : "";
-    groups.initial_char_limit.items.push({
-      title: "Initial character limit exceeded",
+    groups.starter_mismatch.items.push({
+      title: "Does not start with starter code",
       meta: `+${fmtDuration(elapsed)} · ${s.initial_document.length} initial character${s.initial_document.length === 1 ? "" : "s"}${docSuffix}`,
       idx,
       initialSessionIdx: i,
@@ -895,7 +890,7 @@ function renderFlagsList() {
       </details>`;
   };
 
-  host.innerHTML = [groups.ide_action, groups.initial_char_limit, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
+  host.innerHTML = [groups.ide_action, groups.starter_mismatch, groups["approved paste"], groups["internal paste"], groups["unapproved paste"], groups.unfocused].map(renderGroup).join("");
 
   host.querySelectorAll(".flag").forEach((btn) => {
     btn.addEventListener("click", () => {
