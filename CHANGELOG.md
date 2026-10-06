@@ -4,6 +4,7 @@
 
 - Add `--starter-code <1 or more files>` to all commands. Recordings are expected to start with the corresponding content; if a recording does not, it is flagged.
 - Starter files are independent approved-paste sources.
+- removed `--initial-char-limit`; use `--start-code` to track initial content discrepancies.
 
 ## 0.2.17
 
