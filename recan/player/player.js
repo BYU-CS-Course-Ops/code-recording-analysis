@@ -841,7 +841,7 @@ function renderFlagsList() {
     const docSuffix = STATE.sessions.length > 1 ? ` · ${docName}` : "";
     groups.starter_mismatch.items.push({
       title: "Does not start with starter code",
-      meta: `+${fmtDuration(elapsed)} · ${s.initial_document.length} initial character${s.initial_document.length === 1 ? "" : "s"}${docSuffix}`,
+      meta: `+${fmtDuration(elapsed)}${docSuffix}`,
       idx,
       initialSessionIdx: i,
     });

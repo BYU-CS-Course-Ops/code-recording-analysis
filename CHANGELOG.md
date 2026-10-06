@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.20
+
+- Removed `num_initial_chars` statistic.
+- Misc formatting improvements to `summary`
+
+
 ## 0.2.19
 
 - Support an empty list to `--starter-code` so expressions like `--starter-code code/*.py` don't fail when there are no files matched by the glob. 

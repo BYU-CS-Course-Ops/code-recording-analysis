@@ -4,7 +4,7 @@ from recan.session import analyze_events
 from recan.stats import _row_from_session, write_csv
 
 
-def test_stats_include_number_of_initial_characters(tmp_path):
+def test_stats_omit_number_of_initial_characters(tmp_path):
     initial = "starter = 41\n"
     events = [
         {
@@ -25,4 +25,4 @@ def test_stats_include_number_of_initial_characters(tmp_path):
     with output.open(newline="", encoding="utf-8") as stream:
         result = next(csv.DictReader(stream))
 
-    assert result["num_initial_chars"] == str(len(initial))
+    assert "num_initial_chars" not in result

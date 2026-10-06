@@ -111,7 +111,7 @@ The CSV includes: `assignment`, `submission`, `problem`, `student_id`,
 `student_email`, `start_time`, `end_time`, `total_time`, `time_focused`,
 `time_unfocused`, `num_unfocused_events`, `num_ide_actions`,
 `num_unapproved_pastes`, `num_approved_pastes`, `num_internal_pastes`,
-`num_edits`, `num_chars`, `num_initial_chars`, `num_typed_chars`, `num_pasted_chars`, `num_deleted_chars`, `starts_with_starter_code`, and `time_typing`.
+`num_edits`, `num_chars`, `num_typed_chars`, `num_pasted_chars`, `num_deleted_chars`, `starts_with_starter_code`, and `time_typing`.
 
 **Example**
 
@@ -128,7 +128,7 @@ recan stats samples/assignment_7360081_export out.csv \
 
 - **Total / focused / unfocused time** — paired from `focusStatus` events.
 - **Edits** — every recorded document change.
-- **Initial characters** — the number of characters in the document's initial snapshot, before recorded edits. `starts_with_starter_code` is `true`, `false`, or `null` when no starter basename matches; only `false` is flagged.
+- **Starter-code matching** — `starts_with_starter_code` is `true`, `false`, or `null` when no starter basename matches; only `false` is flagged.
 - **Pastes** — chunked inserts that look like a single clipboard/completion event, classified as:
     - `approved` — matches a fragment in `--approved-pastes`,
     - `internal` — content was previously present in this recording (a move/re-paste),
