@@ -319,6 +319,19 @@ function textPosition(root, targetOffset) {
   return null;
 }
 
+function scrollRangeIntoView(range) {
+  const editor = $("editor");
+  const target = range.getClientRects()[0];
+  if (!target) return;
+  const viewport = editor.getBoundingClientRect();
+  editor.scrollTo({
+    top: editor.scrollTop + target.top - viewport.top
+      - (editor.clientHeight - target.height) / 2,
+    left: editor.scrollLeft + target.left - viewport.left
+      - (editor.clientWidth - target.width) / 2,
+  });
+}
+
 function highlight(annotation) {
   if (!window.CSS?.highlights || !window.Highlight) return;
   CSS.highlights.delete(ANNOTATION_HIGHLIGHT_NAME);
@@ -332,6 +345,7 @@ function highlight(annotation) {
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
   CSS.highlights.set(ANNOTATION_HIGHLIGHT_NAME, new Highlight(range));
+  scrollRangeIntoView(range);
 }
 
 function seekAnnotation(annotation) {

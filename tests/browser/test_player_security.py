@@ -169,6 +169,43 @@ def test_play_button_renders_pause_state(player_page):
     assert "M4 2.5h3" in player_page.locator("#play-icon").inner_html()
 
 
+def test_key_moment_scrolls_its_code_into_view(player_page):
+    initial = "".join(f"line_{index} = {index}\n" for index in range(200))
+    recording = analyze_events([
+        {
+            "type": "edit", "document": "main.py",
+            "timestamp": "2026-01-01T00:00:00Z", "offset": 0,
+            "oldFragment": initial, "newFragment": initial,
+        },
+        {
+            "type": "edit", "document": "main.py",
+            "timestamp": "2026-01-01T00:00:01Z", "offset": len(initial),
+            "oldFragment": "", "newFragment": "print('review this code')\n",
+        },
+    ])
+    player_page.set_content(build_player_html([recording]))
+
+    assert player_page.locator("#editor").evaluate("editor => editor.scrollTop") == 0
+    player_page.locator(".flag-group.high .flag").click()
+
+    position = player_page.evaluate("""() => {
+      const range = [...CSS.highlights.get("annotation")][0];
+      const target = range.getClientRects()[0];
+      const editor = document.getElementById("editor");
+      const viewport = editor.getBoundingClientRect();
+      return {
+        scrollTop: editor.scrollTop,
+        targetTop: target.top,
+        targetBottom: target.bottom,
+        viewportTop: viewport.top,
+        viewportBottom: viewport.bottom,
+      };
+    }""")
+    assert position["scrollTop"] > 0
+    assert position["viewportTop"] <= position["targetTop"]
+    assert position["targetBottom"] <= position["viewportBottom"]
+
+
 def test_long_recording_can_scrub_to_end_without_reconstructing_on_every_frame(browser):
     event_count = 1_500
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
