@@ -174,9 +174,23 @@ function renderSession() {
   const session = sessions[state.activeSession];
   $("filename").textContent = basename(session?.document);
   $("filename").title = session?.document || "";
-  $("lang-pill").textContent = session?.language || "plaintext";
+  const language = String(session?.language || "plaintext").toLowerCase();
+  $("lang-pill").textContent = language;
   const text = session?.documentText || "";
-  $("editor-code").textContent = text;
+  const code = $("editor-code");
+  if (window.hljs?.getLanguage(language)) {
+    try {
+      code.innerHTML = window.hljs.highlight(text, {
+        language,
+        ignoreIllegals: true,
+      }).value;
+    } catch (_) {
+      code.textContent = text;
+    }
+  } else {
+    code.textContent = text;
+  }
+  code.className = `hljs language-${language}`;
   $("line-gutter").textContent = Array.from(
     { length: text.split("\n").length },
     (_, index) => index + 1,
@@ -291,15 +305,32 @@ function transformedFragmentRange(annotation) {
   return { start, end };
 }
 
+function textPosition(root, targetOffset) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  let node;
+  while ((node = walker.nextNode())) {
+    const nextOffset = offset + node.length;
+    if (targetOffset <= nextOffset) {
+      return { node, offset: targetOffset - offset };
+    }
+    offset = nextOffset;
+  }
+  return null;
+}
+
 function highlight(annotation) {
   if (!window.CSS?.highlights || !window.Highlight) return;
   CSS.highlights.delete(ANNOTATION_HIGHLIGHT_NAME);
   const offsets = transformedFragmentRange(annotation);
-  const node = $("editor-code").firstChild;
-  if (!offsets || !node || offsets.end <= offsets.start || offsets.end > node.length) return;
+  const code = $("editor-code");
+  if (!offsets || offsets.end <= offsets.start || offsets.end > code.textContent.length) return;
+  const start = textPosition(code, offsets.start);
+  const end = textPosition(code, offsets.end);
+  if (!start || !end) return;
   const range = document.createRange();
-  range.setStart(node, offsets.start);
-  range.setEnd(node, offsets.end);
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
   CSS.highlights.set(ANNOTATION_HIGHLIGHT_NAME, new Highlight(range));
 }
 

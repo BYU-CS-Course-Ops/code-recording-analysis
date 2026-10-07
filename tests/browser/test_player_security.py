@@ -147,6 +147,20 @@ def test_duplicate_fragment_finding_highlights_its_transformed_range(player_page
     assert highlight == {"count": 1, "start": 14, "end": 19, "text": "same!"}
 
 
+def test_syntax_highlighting_preserves_annotation_ranges_across_tokens(player_page):
+    player_page.set_content(build_player_html([session("main.py", 0)]))
+
+    player_page.locator(".flag-group.high .flag").click()
+    assert player_page.locator("#editor-code").get_attribute("class") == "hljs language-python"
+    assert player_page.locator("#editor-code .hljs-built_in").text_content() == "print"
+    assert player_page.locator("#editor-code .hljs-number").text_content() == "42"
+    highlight = player_page.evaluate("""() => {
+      const ranges = [...CSS.highlights.get("annotation")];
+      return { count: ranges.length, text: ranges[0].toString() };
+    }""")
+    assert highlight == {"count": 1, "text": "print(42)\n"}
+
+
 def test_play_button_renders_pause_state(player_page):
     player_page.set_content(build_player_html([session("main.py", 0)]))
 

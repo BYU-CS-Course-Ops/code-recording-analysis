@@ -66,6 +66,7 @@ def build_player_html(sessions) -> str:
     return template.render(
         document_name=bundle["sessions"][0].get("document", "recording") if bundle["sessions"] else "recording",
         css=(_PLAYER_DIR / "player.css").read_text(encoding="utf-8"),
+        highlight=(_PLAYER_DIR / "highlight.min.js").read_text(encoding="utf-8"),
         js=(_PLAYER_DIR / "player.js").read_text(encoding="utf-8"),
         bundle=_embed_safe_json(bundle),
     )
