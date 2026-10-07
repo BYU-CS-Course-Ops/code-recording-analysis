@@ -4,7 +4,8 @@
 
 - Major refactor in underlying data model.
 - Removed `num_initial_chars` statistic.
-- Misc formatting improvements to `summary`
+- Misc formatting improvements to `summary` and `view`
+- Gracefully handle wall-clock jitter in recording timestamps
 
 
 ## 0.2.19
