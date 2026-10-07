@@ -278,11 +278,16 @@ function transformedFragmentRange(annotation) {
   if (!annotation.fragment || annotation.entry_start == null || annotation.entry_end == null) return null;
   const session = sessions[annotation.sessionIndex];
   const entries = session.entries;
-  let sourceIndex = -1;
-  for (let index = annotation.entry_start; index <= annotation.entry_end; index += 1) {
-    if (entries[index]?.type === "edit" && entries[index].newFragment === annotation.fragment) {
-      sourceIndex = index;
-      break;
+  let sourceIndex = Number.isInteger(annotation.source_entry)
+    ? annotation.source_entry
+    : -1;
+  // Backward compatibility for bundles generated before source_entry existed.
+  if (sourceIndex < 0) {
+    for (let index = annotation.entry_start; index <= annotation.entry_end; index += 1) {
+      if (entries[index]?.type === "edit" && entries[index].newFragment === annotation.fragment) {
+        sourceIndex = index;
+        break;
+      }
     }
   }
   if (sourceIndex < 0) return null;
@@ -298,8 +303,11 @@ function transformedFragmentRange(annotation) {
     if (editEnd <= start) {
       start += delta;
       end += delta;
-    } else if (editStart < end) {
-      end = Math.max(start, end + delta);
+    } else if (editStart >= end) {
+      continue;
+    } else {
+      start = Math.min(start, editStart);
+      end = Math.max(editStart + entry.newFragment.length, end + delta);
     }
   }
   return { start, end };

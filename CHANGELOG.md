@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.22
+
+- Classify and count generated edits after applying recorded IDE fixups.
+
 ## 0.2.21
 
 - Ignore unchanged recorder snapshots so they are not classified as paste events.

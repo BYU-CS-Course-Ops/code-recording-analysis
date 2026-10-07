@@ -147,6 +147,29 @@ def test_duplicate_fragment_finding_highlights_its_transformed_range(player_page
     assert highlight == {"count": 1, "start": 14, "end": 19, "text": "same!"}
 
 
+def test_cluster_fixups_highlight_the_final_fragment(player_page):
+    recording = analyze_events([
+        {
+            "type": "edit", "document": "main.py",
+            "timestamp": "2026-01-01T00:00:00Z", "offset": 0,
+            "oldFragment": "", "newFragment": "a\n    b",
+        },
+        {
+            "type": "edit", "document": "main.py",
+            "timestamp": "2026-01-01T00:00:00.010Z", "offset": 2,
+            "oldFragment": "    ", "newFragment": "",
+        },
+    ])
+    player_page.set_content(build_player_html([recording]))
+
+    player_page.locator(".flag-group.high .flag").click()
+    highlight = player_page.evaluate("""() => {
+      const ranges = [...CSS.highlights.get("annotation")];
+      return { count: ranges.length, text: ranges[0].toString() };
+    }""")
+    assert highlight == {"count": 1, "text": "a\nb"}
+
+
 def test_syntax_highlighting_preserves_annotation_ranges_across_tokens(player_page):
     player_page.set_content(build_player_html([session("main.py", 0)]))
 

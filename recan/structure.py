@@ -58,6 +58,7 @@ class AnnotationFields(TypedDict):
 
 
 class Annotation(AnnotationFields, total=False):
+    source_entry: int
     end_timestamp: datetime
     duration: float
     line_count: int

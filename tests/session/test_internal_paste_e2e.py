@@ -89,6 +89,32 @@ def test_internal_paste_matches_transient_state_not_in_final_doc():
     assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 1
 
 
+def test_cluster_fixups_use_final_fragment_for_internal_matching_and_counts():
+    final_fragment = "a\nb"
+    raw_fragment = "a\n    b"
+    history = [_paste_edit(final_fragment, 0, "2026-05-14T11:59:59Z")]
+    events = [
+        _paste_edit(raw_fragment, 0, "2026-05-14T12:00:00Z"),
+        {
+            "type": "edit", "document": "main.py",
+            "timestamp": "2026-05-14T12:00:00.010Z",
+            "offset": 2, "oldFragment": "    ", "newFragment": "",
+        },
+    ]
+
+    session = analyze_events(events, [build_matcher(history)])
+
+    annotation, = session["annotations"]
+    assert annotation["kind"] == "internal_paste"
+    assert annotation["fragment"] == final_fragment
+    assert annotation["char_count"] == len(final_fragment)
+    assert annotation["line_count"] == 2
+    assert annotation["source_entry"] == 0
+    assert (annotation["entry_start"], annotation["entry_end"]) == (0, 1)
+    assert session["total_pasted_chars"] == len(final_fragment)
+    assert session["snapshots"][-1]["document_text"] == final_fragment
+
+
 def test_approved_paste_beats_internal():
     """A fragment that's BOTH internal AND approved is labeled approved."""
     base = datetime(2026, 5, 14, 12, 0, 0)

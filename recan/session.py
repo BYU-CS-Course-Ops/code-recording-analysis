@@ -190,18 +190,12 @@ def _is_ide_action(event: dict) -> bool:
     return False
 
 
-def _is_approved_paste(event: dict, approved_pastes: Sequence[str]) -> bool:
-    """
-    Heuristic for "this generated edit matches a fragment in the approved-fragments file."
-
-    Checks:
-        - Does the event contain a fragment that appears in the approved-fragments file?
-    """
-
-    if not approved_pastes:
+def _is_approved_paste(fragment: str, approved_pastes: Sequence[str]) -> bool:
+    """Whether a generated fragment appears in an approved-fragments source."""
+    if not fragment or not approved_pastes:
         return False
 
-    fragment = normalize_newlines(event.get("newFragment", ""))
+    fragment = normalize_newlines(fragment)
     # Check each source independently: an approved match may not span files.
     return any(fragment in source for source in approved_pastes)
 
@@ -335,8 +329,10 @@ def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
     Updates:
         - state.document (splice in the new fragment so snapshots stay current)
         - the canonical entries list and edit_count
-        - total_pasted_chars (accumulated from generated edits)
         - periodic snapshots (every SNAPSHOT_INTERVAL_EVENTS edits, for timeline scrubbing)
+
+    Pasted characters are counted when the cluster flushes, after IDE fixups
+    have been applied to its canonical generated fragment.
     """
     old_fragment = event.get("oldFragment", "")
     new_fragment = event.get("newFragment", "")
@@ -372,10 +368,9 @@ def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
 
     state.total_deleted_chars += len(old_fragment)
 
-    if is_generated:
-        state.total_pasted_chars += len(new_fragment)
-    else:
+    if not is_generated:
         state.total_typing_chars += len(new_fragment)
+
 
 def _extend_cluster(state: _SessionState, event: dict, ts: datetime, is_generated: bool) -> None:
     """
@@ -399,9 +394,53 @@ def _extend_cluster(state: _SessionState, event: dict, ts: datetime, is_generate
     })
 
 
+def _final_cluster_fragment(cluster: _Cluster, canonical: dict, document: str) -> str:
+    """Return the canonical insertion after later edits in its cluster.
+
+    The recorder can emit a paste followed immediately by IDE indentation or
+    template fixups. Track the inserted range through those later edits, then
+    read its final text from the already-replayed document.
+    """
+    start = canonical["event"].get("offset", 0)
+    end = start + len(canonical["fragment"])
+    after_canonical = False
+
+    for entry in cluster.entries:
+        if entry is canonical:
+            after_canonical = True
+            continue
+        if not after_canonical:
+            continue
+
+        event = entry["event"]
+        edit_start = event.get("offset", 0)
+        edit_end = edit_start + len(event.get("oldFragment", ""))
+        replacement_end = edit_start + len(event.get("newFragment", ""))
+        delta = replacement_end - edit_end
+
+        if edit_end <= start:
+            # The edit occurred before the tracked insertion. Insertions exactly
+            # at its leading boundary are treated as preceding text.
+            start += delta
+            end += delta
+        elif edit_start >= end:
+            # Edits at or after the trailing boundary are outside the insertion.
+            continue
+        else:
+            # The edit overlaps the tracked insertion. Include replacement text
+            # and preserve any surviving tracked text on either side.
+            start = min(start, edit_start)
+            end = max(replacement_end, end + delta)
+
+    start = max(0, min(start, len(document)))
+    end = max(start, min(end, len(document)))
+    return document[start:end]
+
+
 def _classify_cluster(
         cluster: _Cluster,
-        canonical: dict,
+        fragment: str,
+        timestamp: datetime,
         matchers: Sequence[DocumentMatcher],
         approved_pastes: Sequence[str],
 ) -> str:
@@ -409,23 +448,22 @@ def _classify_cluster(
     Pick the final annotation kind for the whole cluster.
 
     IDE-action detection scans every entry — a stub-then-clean template often
-    leaves the stub matching the regex while the longest fragment doesn't.
-    The other rules consult the canonical (longest) fragment, which is the
-    text the IDE actually inserted.
+    leaves the stub matching the regex after its final form no longer does.
+    The other rules inspect the canonical insertion after subsequent fixups.
 
     Precedence:
         - "ide_action":       Any entry in the cluster matches an IDE-template pattern.
-        - "approved paste":   Canonical fragment appears in the approved-fragments file.
-        - "internal paste":   Canonical fragment lived in some earlier snapshot.
+        - "approved paste":   Final fragment appears in the approved-fragments file.
+        - "internal paste":   Final fragment lived in some earlier snapshot.
         - "unapproved paste": Everything else.
     """
     if any(_is_ide_action(e["event"]) for e in cluster.entries):
         return "ide_action"
 
-    if _is_approved_paste(canonical["event"], approved_pastes):
+    if _is_approved_paste(fragment, approved_pastes):
         return "approved_paste"
 
-    if _is_internal_paste(canonical["fragment"], canonical["ts"], matchers):
+    if _is_internal_paste(fragment, timestamp, matchers):
         return "internal_paste"
 
     return "unapproved_paste"
@@ -440,9 +478,8 @@ def _flush_cluster(
     Emit one annotation spanning the in-flight cluster, then clear it.
 
     The annotation's range covers every entry in the cluster (the IDE-inserted
-    text plus any trailing whitespace fixups). The canonical fragment is the
-    longest generated edit — that's the text a reviewer wants to see in the
-    viewer's highlight.
+    text plus any trailing whitespace fixups). Its fragment is the longest
+    generated insertion after later cluster edits have transformed it.
 
     Clusters with no generated edits (just trailing typed events that never
     got seeded) are silently dropped.
@@ -454,16 +491,19 @@ def _flush_cluster(
 
     generated = [e for e in cluster.entries if e["is_generated"]]
     canonical = max(generated, key=lambda e: len(e["fragment"]))
-    kind = _classify_cluster(cluster, canonical, matchers, approved_pastes)
-    fragment = canonical["fragment"]
+    fragment = _final_cluster_fragment(cluster, canonical, state.document)
+    kind = _classify_cluster(
+        cluster, fragment, canonical["ts"], matchers, approved_pastes)
     line_count = fragment.count("\n") + 1
     char_count = len(fragment)
+    state.total_pasted_chars += char_count
 
     state.annotations.append({
         "kind": kind,
         "review_severity": "LOW" if kind != "unapproved_paste" else "HIGH",
         "timestamp": canonical["ts"],
         "entry_start": cluster.entries[0]["idx"], "entry_end": cluster.entries[-1]["idx"],
+        "source_entry": canonical["idx"],
         "line_count": line_count, "char_count": char_count, "fragment": fragment,
     })
 
