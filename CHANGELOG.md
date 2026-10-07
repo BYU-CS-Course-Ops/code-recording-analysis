@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.21
+
+- Ignore unchanged recorder snapshots so they are not classified as paste events.
+
 ## 0.2.20
 
 - Major refactor in underlying data model.

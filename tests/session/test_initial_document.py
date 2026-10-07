@@ -46,6 +46,28 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
     assert initial in summary
 
 
+def test_later_unchanged_snapshot_is_ignored_entirely():
+    initial = "answer = 41\n"
+    final = "answer = 42\n"
+    events = [
+        _event("2026-01-01T00:00:00Z", 0, initial, initial),
+        _event("2026-01-01T00:00:01Z", 9, "41", "42"),
+        _event("2026-01-01T00:00:20Z", 0, final, final),
+    ]
+
+    session = analyze_events(events)
+
+    assert session["total_edits"] == 1
+    assert session["total_typed_chars"] == 2
+    assert session["total_pasted_chars"] == 0
+    assert session["total_deleted_chars"] == 2
+    assert session["total_time"] == 1
+    assert len(session["entries"]) == 2
+    assert [entry["type"] for entry in session["entries"]] == ["initialSnapshot", "edit"]
+    assert session["annotations"] == []
+    assert session["snapshots"] == [{"after_idx": 1, "document_text": final}]
+
+
 def test_recording_loader_preserves_initial_snapshot(tmp_path):
     initial = "answer = 41\n"
     events = [

@@ -570,14 +570,26 @@ def analyze_events(
     )
 
     for event_idx, event in enumerate(events):
-        ts = parse_ts(event["timestamp"])
         kind = _event_kind(event)
+        is_initial_snapshot = _is_initial_snapshot(event, event_idx)
+
+        # Recorder refreshes can emit a whole-document replacement whose old
+        # and new text are identical. It is not an edit and must not affect
+        # timing, metrics, replay entries, or generated-edit classification.
+        if (
+            kind == "edit"
+            and not is_initial_snapshot
+            and event.get("oldFragment", "") == event.get("newFragment", "")
+        ):
+            continue
+
+        ts = parse_ts(event["timestamp"])
 
         # Only operations that become entries can anchor an idle interval.
-        if _is_initial_snapshot(event, event_idx) or kind in {"focusStatus", "edit"}:
+        if is_initial_snapshot or kind in {"focusStatus", "edit"}:
             _record_idle_gap(state, ts)
 
-        if _is_initial_snapshot(event, event_idx):
+        if is_initial_snapshot:
             _initialize_from_snapshot(event, state)
             if starter_code is not None:
                 starter = starter_code.get(state.document_filename)
