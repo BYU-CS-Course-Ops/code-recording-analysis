@@ -2,29 +2,20 @@ import re
 from datetime import datetime
 from typing import Literal, TypedDict
 
-# Matches a complete IDE function-stub fragment, with optional trailing blank lines:
-#   def foo():\n    pass
-#   def foo(a, b):\n    pass
-#   def foo(a: int) -> str:\n    pass
-#   def foo():\n        (cursor sits on indented empty line)
 CREATE_FUNCTION_PATTERN = re.compile(
     r'^[ \t]*def[ \t]+\w+[ \t]*\([^\r\n)]*\)[ \t]*(?:->[ \t]*[^:\r\n]+?)?[ \t]*:'
     r'[ \t]*\r?\n[ \t]+(?:(?:pass|\.\.\.)[ \t]*)?(?:\r?\n[ \t]*)*\Z',
     re.MULTILINE,
 )
-
-# Matches the complete IDE main guard, with indentation alone or a main() call:
-#   if __name__ == "__main__":\n        (cursor on an indented empty line)
-#   if __name__ == '__main__':\n        main()
 MAIN_BLOCK_PATTERN = re.compile(
-    r'^[ \t]*if[ \t]+__name__[ \t]*==[ \t]*(?P<quote>[\'"])__main__(?P=quote)[ \t]*:'
+    r'^[ \t]*if[ \t]+__name__[ \t]*==[ \t]*(?P<quote>[\'\"])__main__(?P=quote)[ \t]*:'
     r'[ \t]*\r?\n[ \t]+(?:main[ \t]*\([ \t]*\)[ \t]*)?(?:\r?\n[ \t]*)*\Z',
     re.MULTILINE,
 )
 
 
 class Input(TypedDict):
-    type: Literal['focusStatus', 'edit']
+    type: Literal["focusStatus", "edit"]
     editor: str
     recorderVersion: str
     timestamp: str
@@ -41,30 +32,60 @@ class FocusStatusInput(Input):
     focused: bool
 
 
-class InitialSnapshotInput(Input):
-    type: Literal['initialSnapshot']
+class InitialSnapshotInput(TypedDict):
+    type: Literal["initialSnapshot"]
     document_text: str
 
 
-class FocusInterval(TypedDict):
-    blur_idx: int
-    focus_idx: int
-    duration: float
+AnnotationKind = Literal[
+    "ide_action",
+    "approved_paste",
+    "internal_paste",
+    "unapproved_paste",
+    "unfocused",
+    "idle_gap",
+    "starter_code_mismatch",
+]
+ReviewSeverity = Literal["LOW", "MEDIUM", "HIGH"]
 
 
-class IdleGap(TypedDict):
-    after_idx: int
-    duration: float
-
-
-class Burst(TypedDict):
-    kind: Literal['approved paste', 'unapproved paste', 'internal paste', 'ide_action']
+class AnnotationFields(TypedDict):
+    kind: AnnotationKind
+    review_severity: ReviewSeverity | None
     timestamp: datetime
-    start_idx: int
-    end_idx: int
+    entry_start: int | None
+    entry_end: int | None
+
+
+class Annotation(AnnotationFields, total=False):
+    end_timestamp: datetime
+    duration: float
     line_count: int
     char_count: int
     fragment: str
+
+
+class InitialSnapshotEntry(TypedDict):
+    timestamp: str
+    type: Literal["initialSnapshot"]
+    document_text: str
+
+
+class EditEntry(TypedDict):
+    timestamp: str
+    type: Literal["edit"]
+    offset: int
+    oldFragment: str
+    newFragment: str
+
+
+class FocusStatusEntry(TypedDict):
+    timestamp: str
+    type: Literal["focusStatus"]
+    focused: bool
+
+
+Entry = InitialSnapshotEntry | EditEntry | FocusStatusEntry
 
 
 class Snapshot(TypedDict):
@@ -72,42 +93,21 @@ class Snapshot(TypedDict):
     document_text: str
 
 
-class TimelineEntry(TypedDict, total=False):
-    # kind ∈ {"focus", "approved paste", "unapproved paste", "internal paste", "ide_action"}
-    kind: str
-    timestamp: datetime
-    duration: float
-    line_count: int
-    char_count: int
-    fragment: str
-
-
 class Session(TypedDict):
     document: str
     language: str
-    initial_document: str
-    start_time: datetime
-    end_time: datetime
+    start_time: datetime | None
+    end_time: datetime | None
     total_time: float
     total_time_unfocused: float
     total_time_typing: float
-
     total_edits: int
     total_chars: int
     total_typed_chars: int
     total_pasted_chars: int
     total_deleted_chars: int
-    total_unapproved_pastes: int
-    total_approved_pastes: int
-    total_internal_pastes: int
-    total_ide_actions: int
-    total_generated_events: int
     starts_with_starter_code: bool | None
-
-    events: list[dict]
-    focus_intervals: list[FocusInterval]
-    idle_gaps: list[IdleGap]
-    bursts: list[Burst]
+    review_severity: ReviewSeverity | None
+    entries: list[Entry]
+    annotations: list[Annotation]
     snapshots: list[Snapshot]
-
-    timeline: list[TimelineEntry]

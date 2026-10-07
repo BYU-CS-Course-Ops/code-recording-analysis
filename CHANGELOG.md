@@ -2,6 +2,7 @@
 
 ## 0.2.20
 
+- Major refactor in underlying data model.
 - Removed `num_initial_chars` statistic.
 - Misc formatting improvements to `summary`
 

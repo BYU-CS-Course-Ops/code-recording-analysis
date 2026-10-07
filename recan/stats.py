@@ -4,7 +4,7 @@ import logging
 from pathlib import Path, PureWindowsPath
 
 from recan.structure import Session
-from recan.session import load_sessions
+from recan.session import load_sessions, annotation_counts
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ CSV_COLUMNS = [
     'num_pasted_chars',
     'num_deleted_chars',
     'starts_with_starter_code',
+    'review_severity',
     'time_typing',
 ]
 
@@ -60,6 +61,7 @@ def get_submissions(folder: Path) -> list[Path]:
 def _row_from_session(submission, session_info: Session, student_id, student_email) -> dict:
     total_time = session_info['total_time']
     time_unfocused = session_info['total_time_unfocused']
+    counts = annotation_counts(session_info)
     return {
         'assignment': submission.parent.name,
         'submission': submission.name,
@@ -72,14 +74,15 @@ def _row_from_session(submission, session_info: Session, student_id, student_ema
         'time_focused': total_time - time_unfocused,
         'time_unfocused': time_unfocused,
         'time_typing': session_info['total_time_typing'],
-        'num_unfocused_events': len(session_info['focus_intervals']),
-        'num_ide_actions': session_info['total_ide_actions'],
-        'num_unapproved_pastes': session_info['total_unapproved_pastes'],
-        'num_approved_pastes': session_info['total_approved_pastes'],
-        'num_internal_pastes': session_info['total_internal_pastes'],
+        'num_unfocused_events': counts['unfocused'],
+        'num_ide_actions': counts['ide_action'],
+        'num_unapproved_pastes': counts['unapproved_paste'],
+        'num_approved_pastes': counts['approved_paste'],
+        'num_internal_pastes': counts['internal_paste'],
         'num_edits': session_info['total_edits'],
         'num_chars': session_info['total_chars'],
         'starts_with_starter_code': session_info['starts_with_starter_code'],
+        'review_severity': session_info['review_severity'],
         'num_typed_chars': session_info['total_typed_chars'],
         'num_pasted_chars': session_info['total_pasted_chars'],
         'num_deleted_chars': session_info['total_deleted_chars'],

@@ -24,7 +24,10 @@ def test_idle_time_is_excluded_and_filename_drives_language():
               for i, second in enumerate([0, 1, 20, 21])]
     session = analyze_events(events)
     assert session["total_time_typing"] == 2
-    assert session["idle_gaps"] == [{"after_idx": 1, "duration": 19}]
+    idle = [a for a in session["annotations"] if a["kind"] == "idle_gap"]
+    assert len(idle) == 1
+    assert (idle[0]["entry_start"], idle[0]["entry_end"]) == (1, 2)
+    assert idle[0]["duration"] == 19
     assert session["language"] == "java"
     assert session["document"] == "simple"
 

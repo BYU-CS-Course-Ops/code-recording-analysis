@@ -1,5 +1,5 @@
 """End-to-end tests: drive analyze_events with synthetic event streams and
-assert that the resulting Burst.kind values reflect internal-paste logic."""
+assert that the resulting annotation kinds reflect internal-paste logic."""
 
 from datetime import datetime, timedelta
 
@@ -55,11 +55,11 @@ def test_internal_paste_after_explicit_deletion():
     events.append(_paste_edit(block, 0, _ts(base, 15_000)))
 
     session = analyze_events(events, [build_matcher(events)])
-    paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
-    assert len(paste_bursts) == 1
-    assert paste_bursts[0]["kind"] == "internal paste"
-    assert session["total_internal_pastes"] == 1
-    assert session["total_unapproved_pastes"] == 0
+    paste_annotations = [a for a in session["annotations"] if a["kind"] in {"approved_paste", "internal_paste", "unapproved_paste"}]
+    assert len(paste_annotations) == 1
+    assert paste_annotations[0]["kind"] == "internal_paste"
+    assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 1
+    assert sum(a["kind"] == "unapproved_paste" for a in session["annotations"]) == 0
 
 
 def test_internal_paste_matches_transient_state_not_in_final_doc():
@@ -84,9 +84,9 @@ def test_internal_paste_matches_transient_state_not_in_final_doc():
     events.append(_paste_edit(line, 0, _ts(base, 10_000)))
 
     session = analyze_events(events, [build_matcher(events)])
-    paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
-    assert [b["kind"] for b in paste_bursts] == ["unapproved paste", "internal paste"]
-    assert session["total_internal_pastes"] == 1
+    paste_annotations = [a for a in session["annotations"] if a["kind"] in {"approved_paste", "internal_paste", "unapproved_paste"}]
+    assert [a["kind"] for a in paste_annotations] == ["unapproved_paste", "internal_paste"]
+    assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 1
 
 
 def test_approved_paste_beats_internal():
@@ -104,11 +104,11 @@ def test_approved_paste_beats_internal():
     events.append(_paste_edit(block, 0, _ts(base, 15_000)))
 
     session = analyze_events(events, [build_matcher(events)], approved_pastes=block)
-    paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
-    assert len(paste_bursts) == 1
-    assert paste_bursts[0]["kind"] == "approved paste"
-    assert session["total_internal_pastes"] == 0
-    assert session["total_approved_pastes"] == 1
+    paste_annotations = [a for a in session["annotations"] if a["kind"] in {"approved_paste", "internal_paste", "unapproved_paste"}]
+    assert len(paste_annotations) == 1
+    assert paste_annotations[0]["kind"] == "approved_paste"
+    assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 0
+    assert sum(a["kind"] == "approved_paste" for a in session["annotations"]) == 1
 
 
 def test_external_fragment_still_unapproved():
@@ -124,8 +124,8 @@ def test_external_fragment_still_unapproved():
     ))
 
     session = analyze_events(events, [build_matcher(events)])
-    paste_bursts = [b for b in session["bursts"] if b["kind"] != "ide_action"]
-    assert len(paste_bursts) == 1
-    assert paste_bursts[0]["kind"] == "unapproved paste"
-    assert session["total_unapproved_pastes"] == 1
-    assert session["total_internal_pastes"] == 0
+    paste_annotations = [a for a in session["annotations"] if a["kind"] in {"approved_paste", "internal_paste", "unapproved_paste"}]
+    assert len(paste_annotations) == 1
+    assert paste_annotations[0]["kind"] == "unapproved_paste"
+    assert sum(a["kind"] == "unapproved_paste" for a in session["annotations"]) == 1
+    assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 0

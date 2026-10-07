@@ -1,165 +1,61 @@
-/* =========================================================================
-   Code Playback — analyst-facing player styles.
-   Default theme: light (warm paper). Dark theme via [data-theme="dark"].
-   ========================================================================= */
-
-:root,
-:root[data-theme="light"] {
-  --bg:           #F8F7F2;   /* warm paper */
-  --panel:        #FFFFFF;
-  --panel-2:      #F2EFE7;
-  --border:       #E2DED1;
-  --border-strong:#C7C2B2;
-
-  --fg:           #1B1B17;
-  --fg-muted:     #5C5A52;
-  --fg-subtle:    #8E8B7F;
-
-  --accent:       #2563EB;   /* playhead / primary — analytical blue */
-  --accent-soft:  #DBE7FF;
-
-  --idle:         #94A3B8;   /* neutral gray — thinking, no concern */
-  --idle-soft:    #E4E7EC;
-
-  --unfocused:    #D97706;   /* amber — distracted, notable */
-  --unfocused-soft:#FCE6BD;
-
-  --burst:        #DC2626;   /* red — unapproved paste, worth investigating */
-  --burst-soft:   #FBD9D6;
-  --burst-rgb:    220, 38, 38;
-
-  /* approved paste — green (sanctioned snippet, e.g. starter code) */
-  --approved:        #16A34A;
-  --approved-soft:   #DCFCE7;
-  --approved-rgb:    22, 163, 74;
-
-  /* unapproved paste — alias of --burst for clarity at call sites */
-  --unapproved:        var(--burst);
-  --unapproved-soft:   var(--burst-soft);
-  --unapproved-rgb:    var(--burst-rgb);
-
-  /* internal paste — blue (student's own prior content, reordering/refactor) */
-  --internal:        #2563EB;
-  --internal-soft:   #DBEAFE;
-  --internal-rgb:    37, 99, 235;
-
-  --ide-action:       #7C3AED;   /* purple — IDE-generated action (auto-complete, template) */
-  --ide-action-soft:  #EDE4FE;
-  --ide-action-rgb:   124, 58, 237;
-
-  --ok:           #16A34A;
-  --ok-rgb:       22, 163, 74;
-
-  --shadow-sm: 0 1px 1px rgba(20, 18, 10, 0.04), 0 1px 2px rgba(20, 18, 10, 0.04);
-  --shadow-md: 0 2px 4px rgba(20, 18, 10, 0.06), 0 4px 12px rgba(20, 18, 10, 0.05);
-
-  --radius:    6px;
-  --radius-lg: 10px;
-
-  /* highlight.js light overrides */
-  --hl-bg:        transparent;
-  --hl-fg:        #1B1B17;
-  --hl-comment:   #8E8B7F;
-  --hl-keyword:   #7C3AED;
-  --hl-string:    #047857;
-  --hl-number:    #B45309;
-  --hl-function:  #1D4ED8;
-  --hl-builtin:   #BE123C;
-  --hl-type:      #B45309;
+:root {
+  --bg: #f8f7f2;
+  --panel: #fff;
+  --panel-2: #f2efe7;
+  --border: #e2ded1;
+  --border-strong: #c7c2b2;
+  --fg: #1b1b17;
+  --fg-muted: #5c5a52;
+  --fg-subtle: #8e8b7f;
+  --accent: #2563eb;
+  --accent-soft: #dbe7ff;
+  --idle: #94a3b8;
+  --unfocused: #d97706;
+  --unapproved: #dc2626;
+  --approved: #16a34a;
+  --internal: #2563eb;
+  --ide-action: #7c3aed;
+  --starter-mismatch: #be123c;
 }
 
 :root[data-theme="dark"] {
-  --bg:           #0E1422;
-  --panel:        #161E2F;
-  --panel-2:      #1F2A40;
-  --border:       #2B3650;
-  --border-strong:#3F4B68;
-
-  --fg:           #ECEFF6;
-  --fg-muted:     #A6B0C3;
-  --fg-subtle:    #6E7790;
-
-  --accent:       #60A5FA;
-  --accent-soft:  #1E3A66;
-
-  --idle:         #64748B;
-  --idle-soft:    #243049;
-
-  --unfocused:    #FBBF24;
-  --unfocused-soft:#3C2E10;
-
-  --burst:        #F87171;
-  --burst-soft:   #3C1B1B;
-  --burst-rgb:    248, 113, 113;
-
-  --approved:        #34D399;
-  --approved-soft:   #16321F;
-  --approved-rgb:    52, 211, 153;
-
-  --unapproved:        var(--burst);
-  --unapproved-soft:   var(--burst-soft);
-  --unapproved-rgb:    var(--burst-rgb);
-
-  --internal:        #60A5FA;
-  --internal-soft:   #172554;
-  --internal-rgb:    96, 165, 250;
-
-  --ide-action:       #A78BFA;
-  --ide-action-soft:  #2B1B4D;
-  --ide-action-rgb:   167, 139, 250;
-
-  --ok:           #34D399;
-  --ok-rgb:       52, 211, 153;
-
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
-
-  --hl-bg:        transparent;
-  --hl-fg:        #ECEFF6;
-  --hl-comment:   #6E7790;
-  --hl-keyword:   #C792EA;
-  --hl-string:    #7EE787;
-  --hl-number:    #FFB454;
-  --hl-function:  #82AAFF;
-  --hl-builtin:   #F78C6C;
-  --hl-type:      #FFD580;
+  --bg: #0e1422;
+  --panel: #161e2f;
+  --panel-2: #1f2a40;
+  --border: #2b3650;
+  --border-strong: #3f4b68;
+  --fg: #eceff6;
+  --fg-muted: #a6b0c3;
+  --fg-subtle: #6e7790;
+  --accent: #60a5fa;
+  --accent-soft: #1e3a66;
+  --idle: #94a3b8;
+  --unfocused: #fbbf24;
+  --unapproved: #f87171;
+  --approved: #34d399;
+  --internal: #60a5fa;
+  --ide-action: #a78bfa;
+  --starter-mismatch: #fb7185;
 }
 
-/* ----- reset ----- */
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px Inter, system-ui, sans-serif; }
+button { color: inherit; font: inherit; }
 
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background-color 200ms ease, color 200ms ease;
-}
-
-button { font: inherit; color: inherit; }
-
-/* ===================== Layout ===================== */
 .app {
   display: grid;
+  grid-template-areas: "topbar topbar" "sidebar editor" "sidebar timeline";
   grid-template-columns: 280px 1fr;
   grid-template-rows: auto 1fr auto;
-  grid-template-areas:
-    "topbar    topbar"
-    "sidebar   editor"
-    "sidebar   timeline";
   height: 100vh;
   min-height: 0;
 }
-
-.topbar    { grid-area: topbar; }
+.topbar { grid-area: topbar; }
 .editor-wrap { grid-area: editor; }
-.timeline    { grid-area: timeline; }
-.stats       { grid-area: sidebar; }
+.timeline { grid-area: timeline; }
+.stats { grid-area: sidebar; }
 
-/* ===================== Topbar ===================== */
 .topbar {
   display: flex;
   align-items: center;
@@ -168,1295 +64,288 @@ button { font: inherit; color: inherit; }
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.01em;
-  color: var(--fg);
-}
-
+.brand { font-size: 13px; font-weight: 600; }
 .brand-mark {
+  display: inline-grid;
+  place-items: center;
   width: 26px;
   height: 26px;
+  margin-right: 8px;
   border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), #7C3AED);
-  display: grid;
-  place-items: center;
+  background: var(--accent);
   color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  box-shadow: var(--shadow-sm);
 }
-
 .brand-sub {
   color: var(--fg-subtle);
-  font-weight: 500;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
-
 .file-info {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: 8px;
+  min-width: 0;
   padding-left: 16px;
   border-left: 1px solid var(--border);
-  min-width: 0;
 }
-
 .filename {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--fg);
-  font-size: 13px;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;          /* keep filename tail visible when truncated */
-  text-align: left;
   max-width: 520px;
+  direction: rtl;
+  font-family: monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
 .lang-pill {
-  font-size: 10px;
   padding: 3px 8px;
-  background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--fg-muted);
+  background: var(--panel-2);
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-  white-space: nowrap;
 }
-
-.topbar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+.topbar-right { display: flex; gap: 8px; margin-left: auto; }
 .icon-btn {
   width: 32px;
   height: 32px;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--fg-muted);
-  display: inline-grid;
-  place-items: center;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.icon-btn:hover { background: var(--panel-2); color: var(--fg); border-color: var(--border-strong); }
-.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.icon-btn svg { width: 16px; height: 16px; }
-
-.theme-toggle .sun  { display: none; }
-.theme-toggle .moon { display: inline; }
-[data-theme="dark"] .theme-toggle .sun  { display: inline; }
+.icon-btn svg { width: 18px; height: 18px; }
+.theme-toggle .sun { display: none; }
+[data-theme="dark"] .theme-toggle .sun { display: inline; }
 [data-theme="dark"] .theme-toggle .moon { display: none; }
 
-/* ===================== Editor ===================== */
-.editor-wrap {
-  position: relative;
-  overflow: hidden;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* The editor-area is the flex child that fills the remaining height under the
-   tab strip + summary row. It must be allowed to SHRINK (min-height:0) so its
-   own scroll container (.editor) can take over vertical overflow instead of
-   the whole column growing and clipping under overflow:hidden. It also serves
-   as the positioning context for the unfocused / session-switch overlays. */
-.editor-area {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.editor-summary {
-  display: flex;
-  gap: 8px;
-  padding: 10px 16px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  align-items: center;
-  min-width: 0;
-}
-
-/* Chips wrap freely inside their own container so the banner can stay
-   pinned to the right edge without being pushed off-screen when the row
-   gets long. */
-.es-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-}
-
-.es-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--fg-muted);
-  font-weight: 500;
-  font-feature-settings: 'tnum';
-}
-
-.es-chip strong { color: var(--fg); font-weight: 600; }
-
-.es-chip .swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.es-chip.burst .swatch       { background: var(--burst); }
-.es-chip.approved-paste .swatch   { background: var(--approved); }
-.es-chip.unapproved-paste .swatch { background: var(--unapproved); }
-.es-chip.internal-paste .swatch   { background: var(--internal); }
-.es-chip.ide-action .swatch  { background: var(--ide-action); }
-.es-chip.unfocused .swatch   { background: var(--unfocused); }
-.es-chip.idle .swatch        { background: var(--idle); }
-
-.es-progress {
-  margin-left: auto;
-  color: var(--fg-subtle);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-}
-
-.editor {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 12.5px;
-  line-height: 1.55;
-  flex: 1 1 auto;
-  min-height: 0;       /* allow the grid to shrink so overflow:auto can scroll */
-  overflow: auto;
-  white-space: pre;
-  position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: start;
-}
-
-.editor code {
-  background: transparent !important;
-  padding: 16px 16px 16px 16px !important;
-  display: block;
-  color: var(--hl-fg);
-  counter-reset: line;
-}
-
-/* line numbers via ::before on each visual line.
-   We emulate via a left "gutter" using a repeating background on the
-   <pre> and a CSS counter on tokens — simpler to inject in JS at render time. */
-.editor-with-gutter {
-  display: grid;
-  grid-template-columns: auto 1fr;
-}
-
-.line-gutter {
-  background: var(--panel);
-  border-right: 1px solid var(--border);
-  color: var(--fg-subtle);
-  text-align: right;
-  padding: 16px 12px 16px 14px;
-  user-select: none;
-  font-variant-numeric: tabular-nums;
-  white-space: pre;
-  font-size: 12.5px;
-  line-height: 1.55;
-  position: sticky;
-  left: 0;
-  align-self: stretch;
-  min-width: 3ch;
-  z-index: 2;
-}
-
-/* event flash — analytic wash, color depends on event kind */
-.editor-wrap.burst-flash::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: var(--burst-soft);
-  opacity: 0.45;
-  animation: burstWash 600ms ease-out;
-}
-.editor-wrap.burst-flash.ide-action::before     { background: var(--ide-action-soft); }
-.editor-wrap.burst-flash.approved-paste::before { background: var(--approved-soft); }
-.editor-wrap.burst-flash.unapproved-paste::before { background: var(--unapproved-soft); }
-.editor-wrap.burst-flash.internal-paste::before { background: var(--internal-soft); }
-
-@keyframes burstWash {
-  from { opacity: 0.7; }
-  to   { opacity: 0; }
-}
-
-.burst-banner {
-  /* Sits at the right edge of the editor-summary chip row as a fixed-width
-     sibling to the chips container (which flexes to fill remaining space).
-     flex-shrink:0 + white-space:nowrap ensure the banner never wraps or
-     shrinks below its content size, even when the chips container is full. */
-  flex-shrink: 0;
-  background: var(--burst);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 6px 10px;
-  border-radius: 999px;
-  box-shadow: var(--shadow-md);
-  display: none;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  --pulse-rgb: var(--burst-rgb);
-  animation: pulseDot 1.2s ease-in-out infinite;
-}
-.burst-banner.show { display: inline-flex; }
-.burst-banner.approved-paste   { background: var(--approved);   --pulse-rgb: var(--approved-rgb); }
-.burst-banner.unapproved-paste { background: var(--unapproved); --pulse-rgb: var(--unapproved-rgb); }
-.burst-banner.internal-paste   { background: var(--internal);   --pulse-rgb: var(--internal-rgb); }
-.burst-banner.ide-action       { background: var(--ide-action); --pulse-rgb: var(--ide-action-rgb); }
-
-.burst-banner::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #fff;
-}
-
-@keyframes pulseDot {
-  0%,100% { box-shadow: 0 0 0 0 rgba(var(--pulse-rgb), 0.4), var(--shadow-md); }
-  50%     { box-shadow: 0 0 0 8px rgba(var(--pulse-rgb), 0), var(--shadow-md); }
-}
-
-/* unfocused overlay */
-.unfocused-overlay {
-  position: absolute;
-  inset: 0;
-  background: color-mix(in oklab, var(--bg) 75%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 2;
-}
-.unfocused-overlay[hidden] { display: none; }
-
-.unfocused-card {
-  background: var(--panel);
-  border: 1px solid var(--unfocused);
-  color: var(--fg);
-  padding: 18px 24px;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  min-width: 260px;
-  text-align: center;
-}
-
-.unfocused-card .label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--unfocused);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.unfocused-card .label::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--unfocused);
-  box-shadow: 0 0 0 4px var(--unfocused-soft);
-}
-.unfocused-card .elapsed {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 28px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-.unfocused-card .hint {
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-
-/* session-switch overlay — shown when the playhead is between two sessions'
-   activity (an inter-session lull). Looks like the unfocused overlay but
-   keyed in --idle so it reads as "thinking / switching context" rather than
-   "distracted". */
-.session-switch-overlay {
-  position: absolute;
-  inset: 0;
-  background: color-mix(in oklab, var(--bg) 78%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 2;
-}
-.session-switch-overlay[hidden] { display: none; }
-
-.session-switch-card {
-  background: var(--panel);
-  border: 1px solid var(--border-strong);
-  color: var(--fg);
-  padding: 18px 24px;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  min-width: 280px;
-  text-align: center;
-}
-.session-switch-card .label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--idle);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.session-switch-card .label::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--idle);
-  box-shadow: 0 0 0 4px var(--idle-soft);
-}
-.session-switch-card .ss-files {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  color: var(--fg);
-}
-.session-switch-card .ss-file {
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.session-switch-card .ss-arrow {
-  width: 16px;
-  height: 16px;
-  color: var(--fg-subtle);
-  flex-shrink: 0;
-}
-.session-switch-card .elapsed {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 24px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-}
-.session-switch-card .hint {
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-
-/* ===================== Tab strip (IDE-style) ===================== */
+.editor-wrap { display: flex; min-height: 0; overflow: hidden; flex-direction: column; }
 .tab-strip {
   display: flex;
-  align-items: stretch;
-  gap: 0;
-  background: var(--panel-2);
+  overflow: auto;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  min-height: 36px;
-  flex-shrink: 0;
+  background: var(--panel-2);
 }
-.tab-strip::-webkit-scrollbar { height: 6px; }
-.tab-strip::-webkit-scrollbar-track { background: transparent; }
-.tab-strip::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
-.tab-strip[hidden] { display: none; }
-
 .tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px 8px 12px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 12px;
-  color: var(--fg-muted);
-  background: transparent;
+  padding: 8px 14px;
   border: 0;
   border-right: 1px solid var(--border);
+  background: transparent;
   cursor: pointer;
+  font-family: monospace;
   white-space: nowrap;
-  transition: background 100ms ease, color 100ms ease;
-  font-weight: 500;
-  /* Hairline indicator strip at the top — invisible on inactive tabs. */
-  border-top: 2px solid transparent;
-  /* Negative offset so the inactive-tab border-top doesn't push baselines. */
-  margin-top: -1px;
 }
-.tab:hover {
-  background: color-mix(in oklab, var(--panel) 60%, transparent);
-  color: var(--fg);
-}
+.tab:hover, .tab:focus { background: var(--bg); }
 .tab.active {
-  background: var(--bg);
-  color: var(--fg);
-  border-top-color: var(--accent);
-  /* The active tab visually "owns" the editor below it — paint over the
-     border-bottom of the strip so there's no seam between tab and editor. */
-  box-shadow: 0 1px 0 0 var(--bg);
-}
-.tab.active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  background: var(--bg);
-}
-
-.tab-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  flex-shrink: 0;
-  background: var(--fg-subtle);
-  opacity: 0.8;
-}
-.tab-dot.lang-python    { background: #3776AB; }
-.tab-dot.lang-javascript,
-.tab-dot.lang-typescript { background: #F7DF1E; }
-.tab-dot.lang-java      { background: #B07219; }
-.tab-dot.lang-go        { background: #00ADD8; }
-.tab-dot.lang-rust      { background: #DEA584; }
-.tab-dot.lang-c,
-.tab-dot.lang-cpp       { background: #00599C; }
-.tab-dot.lang-html      { background: #E34F26; }
-.tab-dot.lang-css       { background: #1572B6; }
-.tab-dot.lang-markdown  { background: var(--fg-subtle); }
-
-.tab-name {
-  font-weight: 600;
-}
-.tab-meta {
-  font-size: 10.5px;
-  color: var(--fg-subtle);
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  margin-left: 2px;
-}
-
-/* burst pip — shows next to filename if this session has any pastes / IDE
-   actions, so reviewers can scan the strip for "which tab needs attention".
-   Sized small so it doesn't dominate the tab. */
-.tab-pip-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 4px;
-}
-.tab-pip {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--fg-subtle);
-}
-.tab-pip.ide-action       { background: var(--ide-action); }
-.tab-pip.approved-paste   { background: var(--approved); }
-.tab-pip.internal-paste   { background: var(--internal); }
-.tab-pip.unapproved-paste { background: var(--unapproved); }
-
-/* When playback auto-switches us into a tab, briefly outline it so the
-   viewer's eye snaps to the new active document. The animation re-fires by
-   toggling the class. */
-.tab.switch-flash {
-  animation: tab-switch-flash 700ms ease-out;
-}
-@keyframes tab-switch-flash {
-  0%   { box-shadow: 0 0 0 0 var(--accent-soft), 0 1px 0 0 var(--bg); background: var(--accent-soft); }
-  40%  { box-shadow: 0 0 0 6px transparent, 0 1px 0 0 var(--bg); }
-  100% { box-shadow: 0 0 0 0 transparent, 0 1px 0 0 var(--bg); background: var(--bg); }
-}
-
-/* Single-session players: hide the strip entirely so the layout collapses to
-   the pre-multidoc look. */
-.tab-strip.single-session { display: none; }
-
-/* ===================== Timeline ===================== */
-.timeline {
   background: var(--panel);
-  border-top: 1px solid var(--border);
-  padding: 14px 20px 16px;
+  box-shadow: inset 0 -3px var(--accent);
+  color: var(--accent);
 }
-
-.timeline-track {
-  position: relative;
-  height: 28px;
-  background: var(--panel-2);
+.editor-summary {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.es-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.es-chip {
+  padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  cursor: pointer;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--fg-muted);
+}
+.es-chip strong { margin-left: 5px; color: var(--fg); }
+.swatch, .legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--idle);
+}
+.ide-action .swatch, .legend-swatch.ide-action { background: var(--ide-action); }
+.approved-paste .swatch, .legend-swatch.approved-paste { background: var(--approved); }
+.internal-paste .swatch, .legend-swatch.internal-paste { background: var(--internal); }
+.unapproved-paste .swatch, .legend-swatch.unapproved-paste { background: var(--unapproved); }
+.unfocused .swatch, .legend-swatch.unfocused { background: var(--unfocused); }
+.idle .swatch, .legend-swatch.idle { background: var(--idle); }
+.legend-swatch.starter-code-mismatch { background: var(--starter-mismatch); }
+
+.editor-area { display: flex; min-height: 0; flex: 1; }
+.editor {
+  display: grid;
+  overflow: auto;
+  min-height: 0;
+  margin: 0;
+  flex: 1;
+  grid-template-columns: auto 1fr;
+  background: var(--bg);
+  font: 12.5px/1.55 monospace;
+  white-space: pre;
+}
+.editor code { display: block; padding: 16px; color: var(--fg); }
+.line-gutter {
+  padding: 16px 12px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg-subtle);
+  text-align: right;
   user-select: none;
 }
 
-.timeline-track:hover { border-color: var(--border-strong); }
-
+.timeline {
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+.timeline-track {
+  position: relative;
+  overflow: hidden;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+.progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent-soft); }
 .markers { position: absolute; inset: 0; }
-
-.progress-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  background: var(--accent-soft);
-  pointer-events: none;
-  transition: width 60ms linear;
-}
-
-.seg-idle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    transparent 0 5px,
-    color-mix(in oklab, var(--idle) 50%, transparent) 5px 9px
-  );
-}
-
-.seg-unfocused {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: var(--unfocused-soft);
-  border-left: 2px solid var(--unfocused);
-  border-right: 2px solid var(--unfocused);
-}
-
-.tick-burst {
+.tick-annotation {
   position: absolute;
   top: -2px;
   bottom: -2px;
   width: 3px;
-  background: var(--burst);
-  border-radius: 1px;
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--burst) 25%, transparent);
-}
-.tick-burst.ide-action {
-  background: var(--ide-action);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ide-action) 25%, transparent);
-}
-.tick-burst.approved-paste {
-  background: var(--approved);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--approved) 25%, transparent);
-}
-.tick-burst.unapproved-paste {
+  min-width: 3px;
   background: var(--unapproved);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--unapproved) 25%, transparent);
 }
-.tick-burst.internal-paste {
-  background: var(--internal);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--internal) 25%, transparent);
-}
-
-/* Session boundary — a vertical divider on the timeline marking the moment
-   the active document changed (or, with a wide gap, the moment activity
-   resumed in a different doc). Sits on top of the lull segment so reviewers
-   can pinpoint "tab switched here". */
+.tick-annotation.interval { top: 5px; bottom: 5px; min-width: 2px; opacity: .75; }
+.tick-annotation.idle-gap { background: var(--idle); }
+.tick-annotation.unfocused { background: var(--unfocused); }
+.tick-annotation.starter-code-mismatch { background: var(--starter-mismatch); }
+.tick-annotation.ide-action { background: var(--ide-action); }
+.tick-annotation.approved-paste { background: var(--approved); }
+.tick-annotation.internal-paste { background: var(--internal); }
+.tick-annotation.unapproved-paste { background: var(--unapproved); }
 .tick-session {
   position: absolute;
+  z-index: 2;
   top: -4px;
   bottom: -4px;
   width: 2px;
   background: var(--fg);
-  opacity: 0.55;
-  border-radius: 1px;
-  z-index: 2;
 }
-.tick-session::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 6px;
-  height: 6px;
-  background: var(--fg);
-  border-radius: 50%;
-  opacity: 0.85;
-}
-
-/* Inter-session lull — visually the same family as .seg-idle but a touch
-   stronger so it reads as "context switch" not just "thinking". */
-.seg-session-lull {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--idle-soft),
-    var(--idle-soft) 4px,
-    transparent 4px,
-    transparent 8px
-  );
-  opacity: 0.9;
-}
-
 .playhead {
   position: absolute;
+  z-index: 3;
   top: -4px;
   bottom: -4px;
   width: 2px;
   background: var(--accent);
-  pointer-events: none;
-  z-index: 3;
 }
-.playhead::before,
-.playhead::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 11px;
-  height: 11px;
-  background: var(--accent);
-  border: 2px solid var(--panel);
-  border-radius: 50%;
-}
-.playhead::before { top: -6px; }
-.playhead::after  { bottom: -6px; }
-
-/* Timeline hover preview tooltip */
-.timeline-tooltip {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  background: var(--fg);
-  color: var(--panel);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  pointer-events: none;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity 120ms ease;
-  box-shadow: var(--shadow-md);
-  z-index: 4;
-}
-.timeline-tooltip.show { opacity: 1; }
-.timeline-tooltip::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 4px solid transparent;
-  border-top-color: var(--fg);
-}
-.timeline-tooltip .tt-tag {
-  display: inline-block;
-  padding: 0 5px;
-  margin-left: 6px;
-  border-radius: 3px;
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 700;
-}
-.timeline-tooltip .tt-tag.burst      { background: var(--burst);      color: #fff; }
-.timeline-tooltip .tt-tag.approved-paste   { background: var(--approved);   color: #fff; }
-.timeline-tooltip .tt-tag.unapproved-paste { background: var(--unapproved); color: #fff; }
-.timeline-tooltip .tt-tag.internal-paste   { background: var(--internal);   color: #fff; }
-.timeline-tooltip .tt-tag.ide-action { background: var(--ide-action); color: #fff; }
-.timeline-tooltip .tt-tag.unfocused  { background: var(--unfocused);  color: #fff; }
-.timeline-tooltip .tt-tag.idle       { background: var(--idle);       color: #fff; }
-
 .timeline-legend {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   margin-top: 10px;
-  font-size: 11px;
   color: var(--fg-subtle);
-  flex-wrap: wrap;
+  font-size: 11px;
 }
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-swatch {
-  width: 14px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.legend-swatch.idle {
-  background: repeating-linear-gradient(
-    -45deg, transparent 0 3px,
-    color-mix(in oklab, var(--idle) 60%, transparent) 3px 5px);
-  border: 1px solid var(--border);
-}
-.legend-swatch.unfocused {
-  background: var(--unfocused-soft);
-  border-left: 2px solid var(--unfocused);
-  border-right: 2px solid var(--unfocused);
-}
-.legend-swatch.burst {
-  width: 3px;
-  height: 14px;
-  background: var(--burst);
-  border-radius: 1px;
-}
-.legend-swatch.approved-paste {
-  width: 3px;
-  height: 14px;
-  background: var(--approved);
-  border-radius: 1px;
-}
-.legend-swatch.unapproved-paste {
-  width: 3px;
-  height: 14px;
-  background: var(--unapproved);
-  border-radius: 1px;
-}
-.legend-swatch.internal-paste {
-  width: 3px;
-  height: 14px;
-  background: var(--internal);
-  border-radius: 1px;
-}
-.legend-swatch.ide-action {
-  width: 3px;
-  height: 14px;
-  background: var(--ide-action);
-  border-radius: 1px;
-}
-
-/* ===================== Transport ===================== */
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .transport {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   margin-top: 14px;
-  gap: 12px;
+  grid-template-columns: 1fr auto 1fr;
 }
-
-.transport-side {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  color: var(--fg-muted);
-  font-size: 12px;
-}
-.transport-side.left  { justify-self: start; }
+.transport-side { display: flex; align-items: center; gap: 10px; color: var(--fg-muted); font-size: 12px; }
 .transport-side.right { justify-self: end; }
-
-.transport-center {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-self: center;
-}
-
-/* keep the play button visually anchored as the centerpiece */
-.transport-center .play-btn { margin: 0 6px; }
-
+.transport-center { justify-self: center; }
 .play-btn {
   width: 40px;
   height: 40px;
+  border: 0;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
-  border: none;
-  display: grid;
-  place-items: center;
   cursor: pointer;
-  transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
-  box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 30%, transparent);
 }
-.play-btn:hover  { background: color-mix(in oklab, var(--accent) 85%, black); transform: translateY(-1px); }
-.play-btn:active { transform: translateY(0); }
 .play-btn svg { width: 16px; height: 16px; fill: currentColor; }
+.speed { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.skip-idle { display: inline-flex; gap: 6px; }
+.time { font: 12px monospace; }
+.kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; font: 10px monospace; }
 
-.transport-btn {
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--fg-muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-.transport-btn:hover {
-  background: var(--panel-2);
-  color: var(--fg);
-  border-color: var(--border-strong);
-}
-.transport-btn svg { width: 13px; height: 13px; }
-.transport-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
-.transport-btn.burst:hover           { color: var(--burst);      border-color: var(--burst); }
-.transport-btn.approved-paste:hover   { color: var(--approved);   border-color: var(--approved); }
-.transport-btn.unapproved-paste:hover { color: var(--unapproved); border-color: var(--unapproved); }
-.transport-btn.internal-paste:hover   { color: var(--internal);   border-color: var(--internal); }
-.transport-btn.ide-action:hover       { color: var(--ide-action); border-color: var(--ide-action); }
-.transport-btn.unfocused:hover  { color: var(--unfocused);  border-color: var(--unfocused); }
-
-.speed {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 12px;
-  cursor: pointer;
-  height: 32px;
-}
-.speed:hover { border-color: var(--border-strong); }
-
-.skip-idle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-  padding: 0 4px;
-}
-
-.skip-idle input { cursor: pointer; accent-color: var(--accent); }
-
-.time {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--fg-muted);
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-}
-.time .now   { color: var(--fg); font-weight: 600; }
-.time .total { color: var(--fg-subtle); }
-
-.kbd-hint {
-  color: var(--fg-subtle);
-  font-size: 11px;
-}
-.kbd {
-  display: inline-block;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  background: var(--panel);
-  color: var(--fg-muted);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10.5px;
-  margin: 0 2px;
-}
-
-/* ===================== Sidebar ===================== */
 .stats {
-  background: var(--panel);
-  border-right: 1px solid var(--border);
+  overflow: auto;
   padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
 }
-
-.stats-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+.stats-section { display: flex; gap: 6px; margin-bottom: 14px; flex-direction: column; }
 .stats-section-title {
+  color: var(--fg-subtle);
   font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--fg-subtle);
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 7px 9px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.stat.full { grid-column: 1 / -1; }
-
-.stat-label {
-  color: var(--fg-muted);
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-}
-.stat-value {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--fg);
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-
-.stat .delta {
-  font-size: 10.5px;
-  color: var(--fg-subtle);
-  font-weight: 500;
-}
-
-/* flag callouts */
-.flags { display: flex; flex-direction: column; gap: 8px; }
-
-/* collapsible flag groups */
-.flag-group {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.flag-group > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  user-select: none;
-  list-style: none;
-}
-.flag-group > summary::-webkit-details-marker { display: none; }
-.flag-group > summary:hover { background: var(--panel-2); }
-.flag-group .fg-chev {
-  transition: transform 150ms ease;
-  color: var(--fg-subtle);
-  font-size: 10px;
-}
-.flag-group[open] .fg-chev { transform: rotate(90deg); }
-.flag-group .fg-label { flex: 1; }
-.flag-group .fg-count {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 7px;
-  font-size: 10.5px;
-  color: var(--fg-muted);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-}
-.flag-group.ide-action > summary { color: var(--ide-action); }
-.flag-group.ide-action .fg-count {
-  background: var(--ide-action-soft);
-  border-color: color-mix(in oklab, var(--ide-action) 30%, transparent);
-  color: var(--ide-action);
-}
-.flag-group.approved-paste > summary { color: var(--approved); }
-.flag-group.approved-paste .fg-count {
-  background: var(--approved-soft);
-  border-color: color-mix(in oklab, var(--approved) 30%, transparent);
-  color: var(--approved);
-}
-.flag-group.unapproved-paste > summary { color: var(--unapproved); }
-.flag-group.unapproved-paste .fg-count {
-  background: var(--unapproved-soft);
-  border-color: color-mix(in oklab, var(--unapproved) 30%, transparent);
-  color: var(--unapproved);
-}
-.flag-group.internal-paste > summary { color: var(--internal); }
-.flag-group.internal-paste .fg-count {
-  background: var(--internal-soft);
-  border-color: color-mix(in oklab, var(--internal) 30%, transparent);
-  color: var(--internal);
-}
-.flag-group.unfocused > summary { color: var(--unfocused); }
-.flag-group.unfocused .fg-count {
-  background: var(--unfocused-soft);
-  border-color: color-mix(in oklab, var(--unfocused) 30%, transparent);
-  color: var(--unfocused);
-}
-.flag-group.starter-mismatch > summary { color: var(--unapproved); }
-.flag-group.starter-mismatch .fg-count {
-  background: var(--unapproved-soft);
-  border-color: color-mix(in oklab, var(--unapproved) 30%, transparent);
-  color: var(--unapproved);
-}
-.flag-group-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0 6px 6px;
-  max-height: 280px;
-  overflow-y: auto;
-}
-.flag-group .flag {
-  background: var(--panel);
-}
-
-/* Documents list in stats sidebar — one row per session. Mirrors the .tab
-   look so reviewers map "row in sidebar ↔ tab in editor" at a glance. */
-.session-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
+.stat-grid { display: grid; gap: 5px; grid-template-columns: 1fr 1fr; }
+.stat { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.stat-label { display: block; color: var(--fg-muted); font-size: 10.5px; text-transform: uppercase; }
+.stat-value { font: 600 15px monospace; }
+.session-list, .flags { display: flex; gap: 4px; flex-direction: column; }
 .session-row {
   display: flex;
-  align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  text-align: left;
+  background: var(--bg);
   cursor: pointer;
-  font-family: inherit;
-  color: var(--fg);
-  font-size: 12px;
-  transition: background 100ms ease, border-color 100ms ease;
+  text-align: left;
 }
-.session-row:hover {
-  background: var(--panel-2);
-  border-color: var(--border-strong);
-}
-.session-row .session-row-dot { width: 8px; height: 8px; flex-shrink: 0; }
-.session-row-name {
-  flex: 1;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.session-row-meta {
-  font-size: 11px;
-  color: var(--fg-subtle);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Document hint inside timeline tooltip (rendered as " · file.py"). */
-.timeline-tooltip .tt-doc {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--fg-subtle);
-  font-weight: 500;
-  font-size: 10px;
-}
-
+.session-row.active { border-color: var(--accent); background: var(--accent-soft); }
+.session-row-name { overflow: hidden; flex: 1; font-family: monospace; text-overflow: ellipsis; white-space: nowrap; }
+.session-row-meta { color: var(--fg-subtle); font-size: 11px; }
+.flag-group { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.flag-group > summary { padding: 8px 10px; cursor: pointer; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; }
+.flag-group.high > summary { color: var(--unapproved); }
+.flag-group.medium > summary { color: var(--unfocused); }
+.flag-group.low > summary { color: var(--ide-action); }
+.fg-count { float: right; }
+.flag-group-body { display: flex; gap: 4px; padding: 0 6px 6px; flex-direction: column; }
 .flag {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  width: 100%;
   padding: 9px 10px;
-  border-radius: 8px;
-  background: var(--bg);
   border: 1px solid var(--border);
   border-left: 3px solid var(--idle);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-  text-align: left;
-  width: 100%;
-}
-.flag:hover { background: var(--panel-2); }
-.flag.burst      { border-left-color: var(--burst); }
-.flag.approved-paste   { border-left-color: var(--approved); }
-.flag.unapproved-paste { border-left-color: var(--unapproved); }
-.flag.internal-paste   { border-left-color: var(--internal); }
-.flag.ide-action { border-left-color: var(--ide-action); }
-.flag.unfocused  { border-left-color: var(--unfocused); }
-.flag.starter-mismatch { border-left-color: var(--unapproved); }
-.flag.ok         { border-left-color: var(--ok); }
-
-.flag-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 700;
-  margin-top: 1px;
-}
-.flag.burst      .flag-icon { background: var(--burst-soft);      color: var(--burst); }
-.flag.approved-paste   .flag-icon { background: var(--approved-soft);   color: var(--approved); }
-.flag.unapproved-paste .flag-icon { background: var(--unapproved-soft); color: var(--unapproved); }
-.flag.internal-paste   .flag-icon { background: var(--internal-soft);   color: var(--internal); }
-.flag.ide-action .flag-icon { background: var(--ide-action-soft); color: var(--ide-action); }
-.flag.unfocused  .flag-icon { background: var(--unfocused-soft);  color: var(--unfocused); }
-.flag.starter-mismatch .flag-icon { background: var(--unapproved-soft); color: var(--unapproved); }
-.flag.ok         .flag-icon { background: color-mix(in oklab, var(--ok) 15%, transparent); color: var(--ok); }
-
-.flag-body { flex: 1; min-width: 0; }
-.flag-title {
-  font-weight: 600;
-  color: var(--fg);
-  font-size: 12px;
-}
-.flag-meta {
-  font-size: 11px;
-  color: var(--fg-muted);
-  margin-top: 2px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-.flag-empty {
-  color: var(--fg-subtle);
-  font-size: 12px;
-  padding: 10px;
-  background: var(--bg);
-  border: 1px dashed var(--border);
   border-radius: 8px;
-  text-align: center;
+  background: var(--panel);
+  cursor: pointer;
+  text-align: left;
 }
+.flag.unapproved-paste { border-left-color: var(--unapproved); }
+.flag.starter-code-mismatch { border-left-color: var(--starter-mismatch); }
+.flag.unfocused { border-left-color: var(--unfocused); }
+.flag.approved-paste { border-left-color: var(--approved); }
+.flag.internal-paste { border-left-color: var(--internal); }
+.flag.ide-action { border-left-color: var(--ide-action); }
+.flag-body { flex: 1; }
+.flag-title { font-weight: 600; }
+.flag-meta { display: block; margin-top: 2px; color: var(--fg-muted); font: 11px monospace; }
+.flag-empty { padding: 10px; border: 1px dashed var(--border); border-radius: 8px; color: var(--fg-subtle); text-align: center; }
 
-/* ===================== Misc ===================== */
-
-/* Fragment highlight — applied when a key-moment flag is clicked, cleared on
-   the next scrub. Uses the CSS Highlights API so we don't have to mangle
-   highlight.js's DOM. */
-::highlight(burst-fragment-ide) {
-  background-color: rgba(var(--ide-action-rgb), 0.18);
-  text-decoration: underline 2px var(--ide-action);
-  text-underline-offset: 3px;
-}
-::highlight(burst-fragment-approved-paste) {
-  background-color: rgba(var(--approved-rgb), 0.18);
-  text-decoration: underline 2px var(--approved);
-  text-underline-offset: 3px;
-}
-::highlight(burst-fragment-unapproved-paste) {
-  background-color: rgba(var(--unapproved-rgb), 0.18);
-  text-decoration: underline 2px var(--unapproved);
-  text-underline-offset: 3px;
-}
-::highlight(burst-fragment-internal-paste) {
-  background-color: rgba(var(--internal-rgb), 0.18);
-  text-decoration: underline 2px var(--internal);
+::highlight(annotation) {
+  background: var(--accent-soft);
+  text-decoration: underline 2px var(--accent);
   text-underline-offset: 3px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    transition-duration: 0.001ms !important;
-  }
-}
-
-/* responsive: collapse sidebar at narrow widths */
 @media (max-width: 980px) {
   .app {
+    grid-template-areas: "topbar" "editor" "timeline" "sidebar";
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "topbar"
-      "editor"
-      "timeline"
-      "sidebar";
   }
-  .stats {
-    border-right: 0;
-    border-top: 1px solid var(--border);
-    max-height: 220px;
-  }
+  .stats { max-height: 220px; border: 0; border-top: 1px solid var(--border); }
   .filename { max-width: 200px; }
 }
-
-/* ===================== highlight.js theme (light + dark via vars) ===================== */
-.hljs                  { color: var(--hl-fg); background: var(--hl-bg); }
-.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
-.hljs-keyword, .hljs-doctag, .hljs-formula,
-.hljs-section, .hljs-selector-tag,
-.hljs-name, .hljs-subst { color: var(--hl-keyword); }
-.hljs-string, .hljs-meta .hljs-string,
-.hljs-regexp, .hljs-addition, .hljs-attribute { color: var(--hl-string); }
-.hljs-number, .hljs-literal, .hljs-attr,
-.hljs-template-variable, .hljs-variable { color: var(--hl-number); }
-.hljs-title, .hljs-title.class_,
-.hljs-class .hljs-title, .hljs-built_in,
-.hljs-symbol, .hljs-bullet { color: var(--hl-function); }
-.hljs-type, .hljs-selector-attr, .hljs-selector-class,
-.hljs-selector-pseudo, .hljs-selector-id { color: var(--hl-type); }
-.hljs-deletion         { color: var(--hl-builtin); }
-.hljs-emphasis         { font-style: italic; }
-.hljs-strong           { font-weight: 700; }
-

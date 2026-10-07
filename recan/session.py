@@ -5,12 +5,9 @@ from typing import Sequence
 
 from recan.algorithm import DocumentMatcher, build_matcher
 from recan.structure import (
-    Burst,
-    FocusInterval,
-    IdleGap,
+    Annotation,
     Session,
     Snapshot,
-    TimelineEntry,
 )
 from recan.utils import (
     language_from_extension,
@@ -18,6 +15,7 @@ from recan.utils import (
     normalize_newlines,
     parse_ts,
     splice,
+    to_utc_iso8601,
 )
 from recan.structure import CREATE_FUNCTION_PATTERN, MAIN_BLOCK_PATTERN
 
@@ -30,7 +28,6 @@ SNAPSHOT_INTERVAL_EVENTS = 200
 # 250 ms sits comfortably between the two.
 BURST_CLUSTER_WINDOW_MS = 250
 BURST_CLUSTER_WINDOW = timedelta(milliseconds=BURST_CLUSTER_WINDOW_MS)
-
 
 @dataclass
 class _Cluster:
@@ -53,12 +50,9 @@ class _Cluster:
 
 @dataclass
 class _SessionState:
-    events: list[dict] = field(default_factory=list)
-    focus_intervals: list[FocusInterval] = field(default_factory=list)
-    idle_gaps: list[IdleGap] = field(default_factory=list)
+    entries: list[dict] = field(default_factory=list)
     snapshots: list[Snapshot] = field(default_factory=list)
-    bursts: list[Burst] = field(default_factory=list)
-    timeline: list[TimelineEntry] = field(default_factory=list)
+    annotations: list[Annotation] = field(default_factory=list)
     cluster: _Cluster = field(default_factory=_Cluster)
     initial_document: str = ""
     document: str = ""
@@ -236,9 +230,7 @@ def _load_starter_code(paths: Sequence[Path] | None) -> dict[str, str]:
 
 
 def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
-    """
-    Detect idle gaps and maintain time bookkeeping.
-    """
+    """Record inactivity between the preceding and about-to-be-added entries."""
     if state.start_time is None:
         state.start_time = ts
 
@@ -248,37 +240,41 @@ def _record_idle_gap(state: _SessionState, ts: datetime) -> None:
         gap_seconds = (ts - state.prev_ts).total_seconds()
         if (
             gap_seconds > IDLE_GAP_THRESHOLD_SECONDS
-            and state.events
-            and state.events[-1].get("type") != "initialSnapshot"
+            and state.entries
+            and state.entries[-1].get("type") != "initialSnapshot"
         ):
-            idle_gap: IdleGap = {
-                "after_idx": len(state.events) - 1,
+            state.annotations.append({
+                "kind": "idle_gap",
+                "review_severity": None,
+                "timestamp": state.prev_ts,
+                "entry_start": len(state.entries) - 1,
+                # The caller invokes this immediately before adding the next entry.
+                "entry_end": len(state.entries),
+                "end_timestamp": ts,
                 "duration": gap_seconds,
-            }
-            state.idle_gaps.append(idle_gap)
+            })
 
     state.prev_ts = ts
 
 
 def _handle_focus(event: dict, ts: datetime, state: _SessionState) -> None:
     """
-    Record a focusStatus event and close out a focus interval if the editor just regained focus.
+    Record a focusStatus entry and emit an unfocused annotation when focus returns.
 
-    A blur (focused=False) is remembered as a pending blur_idx; the next focus
-    (focused=True) emits a FocusInterval and a "focus" timeline entry covering
-    the time the student was away.
+    A blur (focused=False) is remembered until the next focused entry, which
+    closes the inclusive annotation range covering the time away.
     """
     focused_event = {
-        "timestamp": event["timestamp"],
+        "timestamp": to_utc_iso8601(event["timestamp"]),
         "type": "focusStatus",
         "focused": bool(event.get("focused")),
     }
-    state.events.append(focused_event)
+    state.entries.append(focused_event)
 
     focused = event.get("focused")
 
     if focused is False and state.blur_idx is None:
-        state.blur_idx = len(state.events) - 1
+        state.blur_idx = len(state.entries) - 1
         state.blur_ts = ts
         state.focused = False
         state.last_typed_ts = None
@@ -286,19 +282,27 @@ def _handle_focus(event: dict, ts: datetime, state: _SessionState) -> None:
         duration = (ts - state.blur_ts).total_seconds()
         state.total_time_unfocused += duration
 
-        focus_interval: FocusInterval = {
-            "blur_idx": state.blur_idx,
-            "focus_idx": len(state.events) - 1,
+        focus_idx = len(state.entries) - 1
+        # A long blur/focus pair is both inactive and unfocused. Keep the richer
+        # unfocused annotation, but do not suppress unrelated gaps near a blur.
+        state.annotations = [
+            annotation for annotation in state.annotations
+            if not (
+                annotation["kind"] == "idle_gap"
+                and annotation["entry_start"] == state.blur_idx
+                and annotation["entry_end"] == focus_idx
+                and annotation.get("end_timestamp") == ts
+            )
+        ]
+        state.annotations.append({
+            "kind": "unfocused",
+            "review_severity": "MEDIUM",
+            "timestamp": state.blur_ts,
+            "entry_start": state.blur_idx,
+            "entry_end": focus_idx,
+            "end_timestamp": ts,
             "duration": duration,
-        }
-        state.focus_intervals.append(focus_interval)
-
-        timeline_entry: TimelineEntry = {
-            "kind": "focus",
-            "timestamp": ts,
-            "duration": duration,
-        }
-        state.timeline.append(timeline_entry)
+        })
 
         state.blur_idx = None
         state.blur_ts = None
@@ -330,7 +334,7 @@ def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
 
     Updates:
         - state.document (splice in the new fragment so snapshots stay current)
-        - the canonical events list and edit_count
+        - the canonical entries list and edit_count
         - total_pasted_chars (accumulated from generated edits)
         - periodic snapshots (every SNAPSHOT_INTERVAL_EVENTS edits, for timeline scrubbing)
     """
@@ -350,19 +354,19 @@ def _apply_edit(event: dict, state: _SessionState, is_generated: bool) -> None:
     state.document = splice(state.document, offset, old_fragment, new_fragment)
 
     edit_event = {
-        "timestamp": event["timestamp"],
+        "timestamp": to_utc_iso8601(event["timestamp"]),
         "type": "edit",
         "offset": offset,
         "oldFragment": old_fragment,
         "newFragment": new_fragment,
     }
-    state.events.append(edit_event)
+    state.entries.append(edit_event)
 
     state.edit_count += 1
 
     if state.edit_count % SNAPSHOT_INTERVAL_EVENTS == 0:
         state.snapshots.append({
-            "after_idx": len(state.events) - 1,
+            "after_idx": len(state.entries) - 1,
             "document_text": state.document,
         })
 
@@ -378,8 +382,8 @@ def _extend_cluster(state: _SessionState, event: dict, ts: datetime, is_generate
     Add the just-applied edit to the in-flight cluster.
 
     Only generated edits seed a cluster. Once a cluster is in flight, ANY edit
-    within BURST_CLUSTER_WINDOW joins it — that's how trailing whitespace
-    fixups emitted by an IDE template get folded into the burst's range,
+    within the clustering window joins it. This folds trailing whitespace
+    fixups emitted by an IDE template into the generated edit group's range,
     instead of leaving start_idx == end_idx and a highlight that fires before
     the IDE has finished spacing the inserted text.
     """
@@ -387,7 +391,7 @@ def _extend_cluster(state: _SessionState, event: dict, ts: datetime, is_generate
         return
 
     state.cluster.entries.append({
-        "idx": len(state.events) - 1,
+        "idx": len(state.entries) - 1,
         "ts": ts,
         "event": event,
         "fragment": event.get("newFragment", ""),
@@ -402,7 +406,7 @@ def _classify_cluster(
         approved_pastes: Sequence[str],
 ) -> str:
     """
-    Pick a burst kind for the whole cluster.
+    Pick the final annotation kind for the whole cluster.
 
     IDE-action detection scans every entry — a stub-then-clean template often
     leaves the stub matching the regex while the longest fragment doesn't.
@@ -419,12 +423,12 @@ def _classify_cluster(
         return "ide_action"
 
     if _is_approved_paste(canonical["event"], approved_pastes):
-        return "approved paste"
+        return "approved_paste"
 
     if _is_internal_paste(canonical["fragment"], canonical["ts"], matchers):
-        return "internal paste"
+        return "internal_paste"
 
-    return "unapproved paste"
+    return "unapproved_paste"
 
 
 def _flush_cluster(
@@ -433,9 +437,9 @@ def _flush_cluster(
         approved_pastes: Sequence[str],
 ) -> None:
     """
-    Emit one burst spanning the in-flight cluster, then clear it.
+    Emit one annotation spanning the in-flight cluster, then clear it.
 
-    The burst's range covers every event in the cluster (the IDE-inserted
+    The annotation's range covers every entry in the cluster (the IDE-inserted
     text plus any trailing whitespace fixups). The canonical fragment is the
     longest generated edit — that's the text a reviewer wants to see in the
     viewer's highlight.
@@ -455,21 +459,12 @@ def _flush_cluster(
     line_count = fragment.count("\n") + 1
     char_count = len(fragment)
 
-    state.bursts.append(Burst(
-        kind=kind,
-        timestamp=canonical["ts"],
-        start_idx=cluster.entries[0]["idx"],
-        end_idx=cluster.entries[-1]["idx"],
-        line_count=line_count,
-        char_count=char_count,
-        fragment=fragment,
-    ))
-    state.timeline.append({
+    state.annotations.append({
         "kind": kind,
+        "review_severity": "LOW" if kind != "unapproved_paste" else "HIGH",
         "timestamp": canonical["ts"],
-        "line_count": line_count,
-        "char_count": char_count,
-        "fragment": fragment,
+        "entry_start": cluster.entries[0]["idx"], "entry_end": cluster.entries[-1]["idx"],
+        "line_count": line_count, "char_count": char_count, "fragment": fragment,
     })
 
     cluster.entries.clear()
@@ -482,48 +477,50 @@ def _finalize_snapshots(state: _SessionState) -> None:
     The periodic snapshot only fires every SNAPSHOT_INTERVAL_EVENTS edits, so the
     final document state may be missed; this appends one if needed.
     """
-    if not state.events:
+    if not state.entries:
         return
 
     last = state.snapshots[-1] if state.snapshots else None
-    if last is None or last["after_idx"] != len(state.events) - 1:
+    if last is None or last["after_idx"] != len(state.entries) - 1:
         snapshot = {
-            "after_idx": len(state.events) - 1,
+            "after_idx": len(state.entries) - 1,
             "document_text": state.document,
         }
         state.snapshots.append(snapshot)
 
 
-def _count_bursts(bursts: list[Burst]) -> dict[str, int]:
-    """
-    Count bursts by kind, returning a dict keyed by every possible burst kind (zero-filled).
-    """
-    totals = {
-        "ide_action": 0,
-        "unapproved paste": 0,
-        "approved paste": 0,
-        "internal paste": 0,
-    }
-    for burst in bursts:
-        totals[burst["kind"]] += 1
-    return totals
+def annotation_counts(session: Session) -> dict[str, int]:
+    """Return zero-filled reporting counts derived solely from annotations."""
+    annotations = session["annotations"]
+    counts = {"ide_action": 0, "approved_paste": 0, "internal_paste": 0,
+              "unapproved_paste": 0, "unfocused": 0, "idle_gap": 0}
+    for annotation in annotations:
+        if annotation["kind"] in counts:
+            counts[annotation["kind"]] += 1
+    return counts
+
+
+def max_review_severity(annotations: Sequence[Annotation]) -> str | None:
+    """Return the highest review severity present in annotations."""
+    rank = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
+    return max((a["review_severity"] for a in annotations if a["review_severity"]),
+               key=rank.get, default=None)
 
 
 def _build_session(state: _SessionState) -> Session:
     """
-    Assemble the final Session dict from accumulated state — totals, timeline, snapshots, and events.
+    Assemble the final Session dict from metrics, entries, annotations, and snapshots.
     """
     if state.start_time and state.end_time:
         total_time = (state.end_time - state.start_time).total_seconds()
     else:
         total_time = 0.0
 
-    totals = _count_bursts(state.bursts)
+    review_severity = max_review_severity(state.annotations)
 
     return {
         "document": state.document_name,
         "language": language_from_extension(state.document_filename, state.document),
-        "initial_document": state.initial_document,
         "start_time": state.start_time,
         "end_time": state.end_time,
         "total_time": total_time,
@@ -534,18 +531,11 @@ def _build_session(state: _SessionState) -> Session:
         "total_typed_chars": state.total_typing_chars,
         "total_pasted_chars": state.total_pasted_chars,
         "total_deleted_chars": state.total_deleted_chars,
-        "total_unapproved_pastes": totals["unapproved paste"],
-        "total_approved_pastes": totals["approved paste"],
-        "total_internal_pastes": totals["internal paste"],
-        "total_ide_actions": totals["ide_action"],
-        "total_generated_events": sum(totals.values()),
         "starts_with_starter_code": state.starts_with_starter_code,
-        "events": state.events,
-        "focus_intervals": state.focus_intervals,
-        "idle_gaps": state.idle_gaps,
-        "bursts": state.bursts,
+        "review_severity": review_severity,
+        "entries": state.entries,
+        "annotations": sorted(state.annotations, key=lambda a: a["timestamp"]),
         "snapshots": state.snapshots,
-        "timeline": state.timeline,
     }
 
 
@@ -559,17 +549,16 @@ def analyze_events(
     Walk a sequence of recording events and return a fully-populated Session.
 
     Pipeline:
-        - Replay each event, tracking idle gaps and focus intervals.
-        - Buffer adjacent edits (within BURST_CLUSTER_WINDOW of one another)
-          into a cluster. A cluster seeds on the first generated edit and
-          then absorbs every following edit — generated or not — until a
-          larger gap, a focus change, or end of stream closes it.
-        - On flush, emit one burst whose range spans the whole cluster and
+        - Replay each input event, tracking idle gaps and focus annotations.
+        - Buffer adjacent edits within the clustering window into a generated
+          edit cluster. A cluster seeds on the first generated edit and then
+          absorbs every following edit — generated or not — until a larger
+          gap, a focus change, or end of stream closes it.
+        - On flush, emit one annotation whose range spans the whole cluster and
           whose canonical fragment is the longest generated entry. The
           cluster is then classified by inspecting every entry, so a
           stub-then-clean IDE template still resolves to "ide_action".
-        - Assemble the Session dict with totals, snapshots, and a sorted
-          timeline.
+        - Assemble the Session dict with metrics, snapshots, entries, and annotations.
     """
     state = _SessionState()
     # Normalize the legacy single-string form once. Keep a sequence through
@@ -582,7 +571,11 @@ def analyze_events(
 
     for event_idx, event in enumerate(events):
         ts = parse_ts(event["timestamp"])
-        _record_idle_gap(state, ts)
+        kind = _event_kind(event)
+
+        # Only operations that become entries can anchor an idle interval.
+        if _is_initial_snapshot(event, event_idx) or kind in {"focusStatus", "edit"}:
+            _record_idle_gap(state, ts)
 
         if _is_initial_snapshot(event, event_idx):
             _initialize_from_snapshot(event, state)
@@ -592,14 +585,12 @@ def analyze_events(
                     normalize_newlines(state.initial_document).startswith(normalize_newlines(starter))
                     if starter is not None else None
                 )
-            state.events.append({
-                "timestamp": event["timestamp"],
+            state.entries.append({
+                "timestamp": to_utc_iso8601(event["timestamp"]),
                 "type": "initialSnapshot",
                 "document_text": state.initial_document,
             })
             continue
-
-        kind = _event_kind(event)
 
         if kind == "focusStatus":
             _flush_cluster(state, matchers, approved_sources)
@@ -619,11 +610,16 @@ def analyze_events(
 
     _flush_cluster(state, matchers, approved_sources)
     _finalize_snapshots(state)
-    state.timeline.sort(key=lambda e: e["timestamp"])
     if starter_code is not None and state.starts_with_starter_code is None:
-        state.starts_with_starter_code = (
-            False if state.document_filename in starter_code else None
-        )
+        state.starts_with_starter_code = False if state.document_filename in starter_code else None
+    if state.starts_with_starter_code is False:
+        anchor = 0 if state.entries else None
+        timestamp = parse_ts(state.entries[0]["timestamp"]) if state.entries else state.start_time
+        if timestamp is not None:
+            state.annotations.append({
+                "kind": "starter_code_mismatch", "review_severity": "HIGH",
+                "timestamp": timestamp, "entry_start": anchor, "entry_end": anchor,
+            })
 
     return _build_session(state)
 

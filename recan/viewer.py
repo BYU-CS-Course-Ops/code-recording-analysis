@@ -1,98 +1,77 @@
 import json
 from pathlib import Path
-from datetime import datetime
 
 import jinja2
 
 from recan.structure import Session
-
+from recan.session import annotation_counts, max_review_severity
+from recan.utils import to_utc_iso8601
 
 _PLAYER_DIR = Path(__file__).resolve().parent / "player"
 
 
-def _iso_z(ts) -> str:
-    """Format a datetime as ISO with trailing Z, matching the player's expected shape."""
-    if ts is None:
-        return ""
-    if isinstance(ts, datetime):
-        return ts.isoformat().replace("+00:00", "Z")
-    return str(ts)
+def _json_annotation(annotation):
+    result = dict(annotation)
+    for key in ("timestamp", "end_timestamp"):
+        if key in result:
+            result[key] = to_utc_iso8601(result[key])
+    return result
 
 
 def _to_session_bundle(session: Session) -> dict:
-    """Project a Session into the per-session JSON bundle the player consumes."""
+    """Project one Session into the player's session data."""
     return {
-        "document":                session["document"],
-        "language":                session["language"],
-        "initial_document":        session.get("initial_document", ""),
-        "starts_with_starter_code": session.get("starts_with_starter_code"),
-        "start_time":              _iso_z(session["start_time"]),
-        "end_time":                _iso_z(session["end_time"]),
-        "total_time":              session["total_time"],
-        "total_time_unfocused":    session["total_time_unfocused"],
-        "total_edits":             session["total_edits"],
-        "total_unapproved_pastes": session["total_unapproved_pastes"],
-        "total_approved_pastes":   session["total_approved_pastes"],
-        "total_internal_pastes":   session["total_internal_pastes"],
-        "total_ide_actions":       session["total_ide_actions"],
-        "total_generated_events":  session.get("total_generated_events", 0),
-        "events":                  session["events"],
-        "focus_intervals":         [dict(fi) for fi in session["focus_intervals"]],
-        "idle_gaps":               [dict(g) for g in session["idle_gaps"]],
-        "bursts":                  [dict(b) for b in session["bursts"]],
-        "snapshots":               session["snapshots"],
-        "timeline":                session.get("timeline", []),
+        "document": session["document"],
+        "language": session["language"],
+        "start_time": to_utc_iso8601(session["start_time"]),
+        "end_time": to_utc_iso8601(session["end_time"]),
+        "total_time": session["total_time"],
+        "total_edits": session["total_edits"],
+        "entries": session["entries"],
+        "annotations": [_json_annotation(a) for a in session["annotations"]],
+        "snapshots": session["snapshots"],
     }
 
 
-def _to_player_bundle(sessions: list[Session] | Session) -> list[dict]:
-    """Project one or more Sessions into the list-of-sessions bundle the player accepts."""
-    if isinstance(sessions, list):
-        return [_to_session_bundle(s) for s in sessions]
-    return [_to_session_bundle(sessions)]
+def _to_player_bundle(sessions) -> dict:
+    source = sessions if isinstance(sessions, list) else [sessions]
+    # Python's sort is stable, so equal start times retain caller order.
+    source = sorted(source, key=lambda session: (
+        session["start_time"] is None,
+        to_utc_iso8601(session["start_time"]),
+    ))
+    counts = annotation_counts(source[0]) if source else annotation_counts({"annotations": []})
+    for session in source[1:]:
+        for kind, count in annotation_counts(session).items():
+            counts[kind] += count
+    return {
+        "sessions": [_to_session_bundle(s) for s in source],
+        "annotation_counts": counts,
+        "review_severity": max_review_severity(
+            [a for s in source for a in s["annotations"]]),
+    }
 
 
-def _embed_safe_json(bundle: list[dict]) -> str:
-    """JSON-encode a bundle for safe embedding in an HTML <script> tag.
-
-    Two specific dangers when embedding JSON in HTML inside a <script> block:
-    1. The substring ``</script`` ends the script element early. Escape ``</`` to ``<\\/``.
-    2. U+2028 / U+2029 are valid in JSON but illegal in JS string literals.
-    """
+def _embed_safe_json(bundle: dict) -> str:
     text = json.dumps(bundle, ensure_ascii=False, default=str)
-    text = text.replace("</", "<\\/")
-    text = text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-    return text
+    return (text.replace("<", "\\u003c").replace(">", "\\u003e")
+                .replace("&", "\\u0026").replace("</", "<\\/")
+                .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
 
 
-def _primary_document(bundle: list[dict]) -> str:
-    """Pick a display name for the page title — first session's document."""
-    if not bundle:
-        return "recording"
-    return bundle[0].get("document") or "recording"
-
-
-def build_player_html(sessions: list[Session] | Session) -> str:
-    """Render the static HTML player by inlining the bundle and assets via Jinja2."""
+def build_player_html(sessions) -> str:
     bundle = _to_player_bundle(sessions)
-    template_text = (_PLAYER_DIR / "template.html").read_text(encoding="utf-8")
-    css = (_PLAYER_DIR / "player.css").read_text(encoding="utf-8")
-    js = (_PLAYER_DIR / "player.js").read_text(encoding="utf-8")
-    highlight = (_PLAYER_DIR / "highlight.min.js").read_text(encoding="utf-8")
-
     env = jinja2.Environment(autoescape=False, keep_trailing_newline=True)
-    template = env.from_string(template_text)
+    template = env.from_string((_PLAYER_DIR / "template.html").read_text(encoding="utf-8"))
     return template.render(
-        document_name=_primary_document(bundle),
-        css=css,
-        js=js,
-        highlight=highlight,
+        document_name=bundle["sessions"][0].get("document", "recording") if bundle["sessions"] else "recording",
+        css=(_PLAYER_DIR / "player.css").read_text(encoding="utf-8"),
+        js=(_PLAYER_DIR / "player.js").read_text(encoding="utf-8"),
         bundle=_embed_safe_json(bundle),
     )
 
 
-def write_player_html(sessions: list[Session] | Session, recording_file: Path) -> Path:
-    """Write the player HTML next to the recording file and return its path."""
+def write_player_html(sessions, recording_file: Path) -> Path:
     html = build_player_html(sessions)
     stem = recording_file.with_suffix("") if recording_file.suffix == ".gz" else recording_file
     html_path = stem.with_suffix(stem.suffix + ".html") if stem.suffix else stem.with_suffix(".html")

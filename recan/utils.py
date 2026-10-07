@@ -6,16 +6,22 @@ import json
 
 from glob import glob
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def parse_ts(value: str) -> datetime:
-    """
-    Tolerant ISO timestamp parser.
-
-    Python 3.12+ accepts Z and truncates fractional seconds to microseconds.
-    """
+    """Parse an ISO timestamp, accepting the recorder's naive timestamps."""
     return datetime.fromisoformat(value)
+
+
+def to_utc_iso8601(value) -> str:
+    """Return a canonical UTC ISO-8601 timestamp for a datetime or string."""
+    if value is None:
+        return ""
+    timestamp = parse_ts(value) if isinstance(value, str) else value
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def format_duration(seconds: float) -> str:
@@ -31,12 +37,12 @@ def format_ts(ts: datetime) -> str:
 
 def language_from_extension(document: str, content: str | None = None) -> str:
     """
-    Map a document filename to a highlight.js language name.
+    Map a document filename to a display language name.
 
     Primarily keys off the file extension. When the document name has no
     extension (or an unknown one) and ``content`` is supplied, fall back to a
-    lightweight content sniff so extension-less recordings (e.g. "analyze_logs")
-    still get syntax highlighting instead of silently rendering as plaintext.
+    lightweight content sniff so extension-less recordings still get a useful
+    label instead of silently defaulting to plaintext.
     """
     ext = Path(document).suffix.lower()
     lang = {
@@ -71,9 +77,9 @@ def language_from_extension(document: str, content: str | None = None) -> str:
 
 def language_from_content(content: str) -> str:
     """
-    Best-effort language guess from a source snippet, used when the document
-    name carries no usable extension. Deliberately conservative: it only
-    returns a concrete language on a clear signal, otherwise "plaintext".
+    Best-effort language guess from a source snippet when the document name
+    carries no usable extension. Deliberately conservative: it only returns a
+    concrete language on a clear signal, otherwise "plaintext".
     """
     sample = content[:4000]
     if not sample.strip():

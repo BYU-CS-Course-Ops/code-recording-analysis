@@ -72,32 +72,11 @@
           <span class="es-chip unfocused"><span class="swatch"></span><span>Unfocused</span><strong id="sum-unfocused">0</strong></span>
           <span class="es-chip idle"><span class="swatch"></span><span>Idle gaps</span><strong id="sum-idle">0</strong></span>
         </div>
-        <div class="burst-banner" id="burst-banner"><span id="burst-banner-text">Event</span></div>
       </div>
 
       <div class="editor-area" id="editor-area">
         <pre class="editor" id="editor"><div class="line-gutter" id="line-gutter">1</div><code id="editor-code" class="language-plaintext"></code></pre>
 
-        <div class="unfocused-overlay" id="unfocused-overlay" hidden>
-          <div class="unfocused-card">
-            <div class="label">Window unfocused</div>
-            <div class="elapsed" id="unfocused-elapsed">0:00</div>
-            <div class="hint">Student switched away from the editor</div>
-          </div>
-        </div>
-
-        <div class="session-switch-overlay" id="session-switch-overlay" hidden>
-          <div class="session-switch-card">
-            <div class="label">Between documents</div>
-            <div class="ss-files">
-              <span class="ss-file" id="ss-from">—</span>
-              <svg class="ss-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
-              <span class="ss-file" id="ss-to">—</span>
-            </div>
-            <div class="elapsed" id="ss-elapsed">0:00</div>
-            <div class="hint">Lull between sessions</div>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -106,7 +85,6 @@
         <div class="progress-fill" id="progress-fill"></div>
         <div class="markers" id="timeline-markers"></div>
         <div class="playhead" id="playhead"></div>
-        <div class="timeline-tooltip" id="timeline-tooltip"></div>
       </div>
 
       <div class="timeline-legend" aria-hidden="true">
@@ -116,6 +94,7 @@
         <span class="legend-item"><span class="legend-swatch approved-paste"></span>Approved paste</span>
         <span class="legend-item"><span class="legend-swatch internal-paste"></span>Internal paste</span>
         <span class="legend-item"><span class="legend-swatch unapproved-paste"></span>Unapproved paste</span>
+        <span class="legend-item"><span class="legend-swatch starter-code-mismatch"></span>Starter mismatch</span>
       </div>
 
       <div class="transport">
@@ -135,24 +114,8 @@
         </div>
 
         <div class="transport-center">
-          <button class="transport-btn unfocused" id="prev-unfocused" title="Previous unfocused (Shift+[)" aria-label="Previous unfocused">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5v11M13 2.5l-8 5.5 8 5.5z"/></svg>
-            <span>Unfocused</span>
-          </button>
-          <button class="transport-btn burst" id="prev-burst" title="Previous burst ([)" aria-label="Previous burst">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5v11M13 2.5l-8 5.5 8 5.5z"/></svg>
-            <span>Burst</span>
-          </button>
           <button class="play-btn" id="play-btn" aria-label="Play">
             <svg viewBox="0 0 16 16" id="play-icon"><path d="M4 2.5v11l9-5.5z"/></svg>
-          </button>
-          <button class="transport-btn burst" id="next-burst" title="Next burst (])" aria-label="Next burst">
-            <span>Burst</span>
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2.5v11M3 2.5l8 5.5-8 5.5z"/></svg>
-          </button>
-          <button class="transport-btn unfocused" id="next-unfocused" title="Next unfocused (Shift+])" aria-label="Next unfocused">
-            <span>Unfocused</span>
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2.5v11M3 2.5l8 5.5-8 5.5z"/></svg>
           </button>
         </div>
 
@@ -171,7 +134,6 @@
     </aside>
   </div>
 
-  <script>{{ highlight }}</script>
   <script>window.__BUNDLE__ = {{ bundle }};</script>
   <script>{{ js }}</script>
 </body>

@@ -1,10 +1,12 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 import jinja2
 
 from recan.structure import Session
-from recan.utils import format_duration, format_ts
+from recan.session import annotation_counts
+from recan.utils import format_duration, format_ts, to_utc_iso8601
 
 _TEMPLATE_PATH = Path(__file__).resolve().parent / "timeline.md.jinja"
 
@@ -26,6 +28,7 @@ def _render_one_markdown(session: Session, template: jinja2.Template) -> str:
         format_ts=format_ts,
         format_duration=format_duration,
         len=len,
+        counts=annotation_counts(session),
     )
 
 
@@ -38,5 +41,10 @@ def render_markdown(sessions: list[Session]) -> str:
 
 
 def render_json(sessions: list[Session]) -> str:
-    """Serialize the list of Sessions as a single indented JSON array."""
-    return json.dumps(sessions, default=str, indent=4)
+    """Serialize Sessions with the canonical UTC timestamp representation."""
+    def encode_datetime(value: object) -> str:
+        if isinstance(value, datetime):
+            return to_utc_iso8601(value)
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+    return json.dumps(sessions, default=encode_datetime, indent=4)

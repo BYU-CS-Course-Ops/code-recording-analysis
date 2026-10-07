@@ -27,20 +27,19 @@ def test_initial_snapshot_seeds_reconstruction_without_counting_as_edit():
 
     session = analyze_events(events)
 
-    assert session["initial_document"] == initial
     assert session["total_edits"] == 1
     assert session["total_chars"] == len("answer = 42\n")
-    assert len(session["events"]) == 2
-    assert session["events"][0] == {
-        "timestamp": "2026-01-01T00:00:00Z",
+    assert len(session["entries"]) == 2
+    assert [entry["type"] for entry in session["entries"]] == ["initialSnapshot", "edit"]
+    assert session["entries"][0] == {
+        "timestamp": "2026-01-01T00:00:00.000000Z",
         "type": "initialSnapshot",
         "document_text": initial,
     }
-    assert session["idle_gaps"] == []
+    assert not any(a["kind"] == "idle_gap" for a in session["annotations"])
     assert session["snapshots"][-1]["document_text"] == "answer = 42\n"
 
     bundle = _to_session_bundle(session)
-    assert bundle["initial_document"] == initial
 
     summary = render_markdown([session])
     assert "## Initial content" in summary

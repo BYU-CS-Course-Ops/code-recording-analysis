@@ -46,7 +46,7 @@ def test_approved_matches_do_not_cross_starter_sources():
         [event],
         approved_pastes=["partA-", "partB"],
     )
-    assert session["total_approved_pastes"] == 0
+    assert not any(a["kind"] == "approved_paste" for a in session["annotations"])
 
 
 def test_load_sessions_approves_fragments_from_starter_files(tmp_path):
@@ -61,7 +61,7 @@ def test_load_sessions_approves_fragments_from_starter_files(tmp_path):
         [recording], None, None, [], starter_code_paths=[starter]
     )
 
-    assert sessions[0]["total_approved_pastes"] == 1
+    assert [a["kind"] for a in sessions[0]["annotations"] if a["kind"] == "approved_paste"] == ["approved_paste"]
 
 
 def test_duplicate_and_unreadable_starters_fail_clearly(tmp_path):

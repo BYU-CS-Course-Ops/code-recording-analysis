@@ -2,8 +2,9 @@
 
 Analyze IDE recording files captured by the BeanLab IDE recorder.
 
-`recan` reads one or more recordings (`.jsonl` or `.jsonl.gz`), reconstructs each session's timeline, and reports on
-focus, edits, pastes, IDE-generated actions, and idle gaps. It can also render a self-contained HTML player for
+`recan` reads one or more recordings (`.jsonl` or `.jsonl.gz`), reconstructs each session, and reports on
+focus, edits, pastes, IDE-generated actions, and idle gaps. The breaking output model has two layers: `Session.entries`
+contains normalized replay operations, while sparse `Session.annotations` contains Python-derived review findings. It can also render a self-contained HTML player for
 scrubbing through a recording and produce CSVs for batch / cross-submission analysis of a Gradescope export.
 
 ## Install
@@ -71,9 +72,9 @@ recan summary samples/session.jsonl.gz --exclude .html --approved-pastes samples
 
 ### `view`
 
-Render a self-contained HTML player. The player inlines the recording, CSS, JS, and a syntax highlighter into one file —
-open it directly, no server required. You can scrub the timeline, jump between bursts and idle gaps, and inspect the
-document state at any point.
+Render a self-contained HTML player. The player inlines the recording, CSS, and JS into one file —
+open it directly, no server required. You can scrub the timeline, inspect annotation markers, and inspect the
+document state at any point. Key moments are grouped by Python-provided HIGH, MEDIUM, and LOW review severity; severity is review priority, not a conclusion that misconduct occurred. Previous/next generated-group and unfocused navigation controls are intentionally not provided.
 
 ```bash
 recan view <recording_file(s)> [common args] [--no-open]
@@ -111,7 +112,7 @@ The CSV includes: `assignment`, `submission`, `problem`, `student_id`,
 `student_email`, `start_time`, `end_time`, `total_time`, `time_focused`,
 `time_unfocused`, `num_unfocused_events`, `num_ide_actions`,
 `num_unapproved_pastes`, `num_approved_pastes`, `num_internal_pastes`,
-`num_edits`, `num_chars`, `num_typed_chars`, `num_pasted_chars`, `num_deleted_chars`, `starts_with_starter_code`, and `time_typing`.
+`num_edits`, `num_chars`, `num_typed_chars`, `num_pasted_chars`, `num_deleted_chars`, `starts_with_starter_code`, `review_severity`, and `time_typing`.
 
 **Example**
 
@@ -133,9 +134,10 @@ recan stats samples/assignment_7360081_export out.csv \
     - `approved` — matches a fragment in `--approved-pastes`,
     - `internal` — content was previously present in this recording (a move/re-paste),
     - `unapproved` — everything else.
-- **IDE actions** — tightly-grouped bursts of generated edits (e.g. PyCharm "generate constructor", VS Code snippet
-  expansion), distinguished from pastes by burst shape.
-- **Idle gaps** — pauses between events longer than the idle threshold.
+- **IDE actions** — tightly clustered groups of generated edits (e.g. PyCharm "generate constructor", VS Code snippet
+  expansion), distinguished from pastes by generated-edit group shape.
+- **Idle gaps** — pauses between entries longer than the idle threshold.
+- **Annotations and severity** — sparse derived findings reference inclusive entry ranges. Python assigns LOW, MEDIUM, or HIGH review severity; counts and session severity are reporting projections, not canonical Session fields.
 
 ## Development
 

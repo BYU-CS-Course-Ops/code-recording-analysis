@@ -1,6 +1,3 @@
-{%- set paste_entries = session.timeline | selectattr("kind", "equalto", "unapproved paste") | list -%}
-{%- set initial_entries = session.events | selectattr("type", "equalto", "initialSnapshot") | list -%}
-
 # **{{ session.document or "(unknown document)" }}**
 
 |              |                                           |
@@ -9,48 +6,39 @@
 | **Ended**    | {{ format_ts(session.end_time) }}         |
 | **Duration** | {{ format_duration(session.total_time) }} |
 | **Language** | {{ session.language }}                    |
+| **Review severity** | {{ session.review_severity or "None" }} |
 
 ## Summary
 
-| Metric                | Count                                               |
-|-----------------------|-----------------------------------------------------|
-| Edits                 | {{ session.total_edits }}                           |
-| Focus events          | {{ len(session.focus_intervals) }}                  |
-| Time unfocused        | {{ format_duration(session.total_time_unfocused) }} |
-| IDE actions           | {{ session.total_ide_actions }}                     |
-| Approved pastes       | {{ session.total_approved_pastes }}                 |
-| Internal pastes       | {{ session.total_internal_pastes }}                 |
-| **Unapproved pastes** | **{{ session.total_unapproved_pastes }}**           |
-{% if session.starts_with_starter_code is false %}
-| Starter-code mismatch | Yes |
+| Metric | Count |
+|--------|-------|
+| Edits | {{ session.total_edits }} |
+| Unfocused intervals | {{ counts.unfocused }} |
+| IDE actions | {{ counts.ide_action }} |
+| Approved pastes | {{ counts.approved_paste }} |
+| Internal pastes | {{ counts.internal_paste }} |
+| **Unapproved pastes** | **{{ counts.unapproved_paste }}** |
+{% if session.starts_with_starter_code is false %}| Starter-code mismatch | Yes |
 {% endif %}
 
 ## Initial content
 
-{% if not initial_entries -%}
-*No initial content recorded.*
-{%- else -%}
-{% for entry in initial_entries %}
+{% set initial_entries = session.entries | selectattr("type", "equalto", "initialSnapshot") | list %}
+{% if not initial_entries %}*No initial content recorded.*
+{% else %}{% for entry in initial_entries %}
 ### {{ entry.timestamp }}
-
-`{{ len(entry.document_text) }} character{{ "s" if len(entry.document_text) != 1 else "" }}`
 
 ```{{ session.language }}
 {{ entry.document_text }}
 ```
-
-{% endfor -%}
-{%- endif %}
+{% endfor %}{% endif %}
 
 ## Unapproved pastes
 
-{% if not paste_entries -%}
-*No unapproved pastes recorded.*
-{%- elif len(paste_entries) >= 20 -%}
-*Timeline omitted — {{ len(paste_entries) }} unapproved pastes exceeds threshold of 20.*
-{%- else -%}
-{% for entry in paste_entries %}
-
+{% set paste_entries = session.annotations | selectattr("kind", "equalto", "unapproved_paste") | list %}
+{% if not paste_entries %}*No unapproved pastes recorded.*
+{% elif len(paste_entries) >= 20 %}*Timeline omitted — {{ len(paste_entries) }} unapproved pastes exceeds threshold of 20.*
+{% else %}{% for entry in paste_entries %}
 ### {{ format_ts(entry.timestamp) }}
 
 `{{ entry.line_count }} line{{ "s" if entry.line_count != 1 else "" }}` — `{{ entry.char_count }} char{{ "s" if entry.char_count != 1 else "" }}`
@@ -58,8 +46,6 @@
 ```{{ session.language }}
 {{ entry.fragment }}
 ```
-
-{% endfor -%}
-{%- endif %}
+{% endfor %}{% endif %}
 
 ---
