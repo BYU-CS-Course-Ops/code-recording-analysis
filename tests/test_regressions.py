@@ -8,7 +8,7 @@ import pytest
 from recan.algorithm import DocumentMatcher
 from recan.main import _handle_view, _parse_view
 from recan.session import analyze_events
-from recan.utils import _get_recordings, _load_recording, parse_ts
+from recan.utils import _get_recordings, _load_recording, load_recordings, parse_ts
 from recan.viewer import build_player_html
 
 
@@ -51,6 +51,26 @@ def test_out_of_order_edit_is_rejected_without_mutating_document():
     with pytest.raises(ValueError, match="timestamp order"):
         matcher.apply_edit(0, "hello", "bad", ts - timedelta(seconds=1))
     assert matcher.document == "hello"
+
+
+def test_loaded_recording_normalizes_regressing_timestamps_without_reordering(tmp_path):
+    path = tmp_path / "regressing.jsonl"
+    events = [
+        {"id": "first", "timestamp": "2026-01-01T00:00:01.000000000Z"},
+        {"id": "second", "timestamp": "2025-12-31T23:59:59.000000000Z"},
+        {"id": "third", "timestamp": "2025-12-31T23:59:59.500000000Z"},
+    ]
+    path.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+
+    loaded = load_recordings([path], None, [])[0][1]
+
+    assert [event["id"] for event in loaded] == ["first", "second", "third"]
+    assert [event["raw_timestamp"] for event in loaded] == [event["timestamp"] for event in events]
+    assert [event["timestamp"] for event in loaded] == [
+        "2026-01-01T00:00:01.000000000Z",
+        "2026-01-01T00:00:01.001Z",
+        "2026-01-01T00:00:01.002Z",
+    ]
 
 
 def test_recursive_globs_find_nested_recordings_and_deduplicate(tmp_path):

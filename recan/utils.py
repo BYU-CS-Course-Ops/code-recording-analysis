@@ -6,7 +6,7 @@ import json
 
 from glob import glob
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 def parse_ts(value: str) -> datetime:
@@ -22,6 +22,41 @@ def to_utc_iso8601(value) -> str:
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=timezone.utc)
     return timestamp.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def normalize_event_timestamps(events: list[dict]) -> list[dict]:
+    """Preserve recording order while making timestamped events monotonic.
+
+    Recorder timestamps are retained verbatim in ``raw_timestamp``.  A
+    timestamp is advanced by at least one millisecond whenever it would not
+    be later than the previous effective timestamp; events themselves are
+    never reordered.
+    """
+    normalized = []
+    previous_effective = None
+
+    for event in events:
+        normalized_event = event.copy()
+        raw_timestamp = event.get("timestamp")
+        if raw_timestamp is not None:
+            raw = parse_ts(raw_timestamp)
+            if raw.tzinfo is None:
+                raw = raw.replace(tzinfo=timezone.utc)
+            raw = raw.astimezone(timezone.utc)
+
+            effective = raw
+            if previous_effective is not None:
+                effective = max(raw, previous_effective + timedelta(milliseconds=1))
+
+            normalized_event["raw_timestamp"] = raw_timestamp
+            if effective != raw:
+                normalized_event["timestamp"] = (
+                    effective.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                )
+            previous_effective = effective
+        normalized.append(normalized_event)
+
+    return normalized
 
 
 def format_duration(seconds: float) -> str:
@@ -186,7 +221,8 @@ def load_recordings(paths: list[Path], problems: Path, excluded_file_types: list
 
     inputs = []
     for recording in recordings:
-        inputs.append((recording, _load_recording(recording, excluded_file_types)))
+        events = _load_recording(recording, excluded_file_types)
+        inputs.append((recording, normalize_event_timestamps(events)))
 
     problem_set = generate_problem_set(problems)
 
