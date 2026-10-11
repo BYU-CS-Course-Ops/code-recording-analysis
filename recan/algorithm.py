@@ -24,6 +24,7 @@ from datetime import datetime
 from pydivsufsort import divsufsort, sa_search
 
 from recan.utils import parse_ts, splice
+from recan.replay import validated_events
 
 
 class DocumentMatcher:
@@ -188,7 +189,10 @@ def build_matcher(events: list[dict]) -> DocumentMatcher:
     """
     matcher = DocumentMatcher()
 
-    for event in events:
+    for event in validated_events(events):
+        if event.get("type") == "documentSnapshot":
+            matcher.apply_edit(0, matcher.document, event["document_text"], parse_ts(event["timestamp"]))
+            continue
         if "newFragment" not in event:
             continue
 

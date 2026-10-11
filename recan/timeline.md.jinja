@@ -21,6 +21,17 @@
 {% if session.starts_with_starter_code is false %}| Starter-code mismatch | Yes |
 {% endif %}
 
+{% set recording_issues = session.annotations | selectattr("kind", "equalto", "recording_issue") | list %}
+{% if recording_issues %}
+## Recording issues
+
+Counts exclude skipped edits. Unreliable sections are not classified as pastes.
+
+{% for issue in recording_issues %}
+- {{ format_ts(issue.timestamp) }}: {{ issue.message }} (event {{ issue.event_index + 1 }}, {{ issue.skipped_edits }} edits skipped)
+{% endfor %}
+
+{% endif %}
 ## Initial content
 
 {% set initial_entries = session.entries | selectattr("type", "equalto", "initialSnapshot") | list %}

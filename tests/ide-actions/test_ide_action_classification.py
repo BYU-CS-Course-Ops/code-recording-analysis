@@ -11,6 +11,26 @@ def edit(fragment, *, timestamp="2026-01-01T00:00:01Z", old="", offset=0):
             "offset": offset, "oldFragment": old, "newFragment": fragment}
 
 
+@pytest.mark.parametrize("fragment", ["()", "[]", "{}", "''", '""', "'''", '"""'])
+def test_auto_close_is_an_ide_action_even_with_a_typed_character(fragment):
+    session = analyze_events([
+        edit(fragment),
+        edit("x", offset=1, timestamp="2026-01-01T00:00:01.100Z"),
+    ])
+    annotation, = session["annotations"]
+    assert annotation["kind"] == "ide_action"
+    assert annotation["fragment"] == fragment[:1] + "x" + fragment[1:]
+    assert session["total_pasted_chars"] == 0
+
+
+def test_auto_close_does_not_hide_a_real_paste_in_the_same_cluster():
+    session = analyze_events([
+        edit("[]"),
+        edit("print('pasted code')", offset=1, timestamp="2026-01-01T00:00:01.100Z"),
+    ])
+    assert session["annotations"][0]["kind"] == "unapproved_paste"
+
+
 @pytest.mark.parametrize("fragment", [
     "def foo():\n    pass",
     "def foo():\n    pass\n",

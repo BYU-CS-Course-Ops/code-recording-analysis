@@ -10,6 +10,7 @@ const KIND_LABELS = {
   unfocused: "Unfocused",
   idle_gap: "Idle gap",
   starter_code_mismatch: "Starter-code mismatch",
+  recording_issue: "Recording issue",
 };
 const PLAY_ICON = '<path d="M4 2.5v11l9-5.5z"/>';
 const PAUSE_ICON = '<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>';
@@ -150,7 +151,9 @@ function documentAt(session, entryIndex) {
   }
   for (let index = startIndex; index <= entryIndex; index += 1) {
     const entry = session.entries[index];
-    if (entry?.type === "edit") {
+    if (entry?.type === "documentSnapshot") {
+      text = entry.document_text;
+    } else if (entry?.type === "edit") {
       text = text.slice(0, entry.offset)
         + entry.newFragment
         + text.slice(entry.offset + entry.oldFragment.length);
@@ -180,10 +183,12 @@ function renderSession() {
   const code = $("editor-code");
   if (window.hljs?.getLanguage(language)) {
     try {
+      // HTML parsing normalizes literal CRLF/CR, but recorder offsets do not.
+      // Character references preserve the original text in the tokenized DOM.
       code.innerHTML = window.hljs.highlight(text, {
         language,
         ignoreIllegals: true,
-      }).value;
+      }).value.replace(/\r/g, "&#13;");
     } catch (_) {
       code.textContent = text;
     }
@@ -195,6 +200,10 @@ function renderSession() {
     { length: text.split("\n").length },
     (_, index) => index + 1,
   ).join("\n");
+  const lastRecovery = annotations.findLast(annotation => annotation.kind === "recording_issue"
+    && annotation.sessionIndex === state.activeSession && annotation.globalEnd <= state.playhead
+    && annotation.action !== "already_applied");
+  $("recording-warning").hidden = lastRecovery?.action !== "interrupted";
   updateActiveState();
 }
 
@@ -229,6 +238,9 @@ function renderSummary() {
 }
 
 function annotationLabel(annotation) {
+  if (annotation.kind === "recording_issue") {
+    return `${annotation.message} (${annotation.skipped_edits} edits skipped; event ${annotation.event_index + 1})`;
+  }
   const extra = annotation.fragment
     ? ` · ${annotation.char_count} chars`
     : annotation.duration
@@ -340,7 +352,7 @@ function scrollRangeIntoView(range) {
   });
 }
 
-function highlight(annotation) {
+function highlight(annotation, scroll = true) {
   if (!window.CSS?.highlights || !window.Highlight) return;
   CSS.highlights.delete(ANNOTATION_HIGHLIGHT_NAME);
   const offsets = transformedFragmentRange(annotation);
@@ -353,10 +365,11 @@ function highlight(annotation) {
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
   CSS.highlights.set(ANNOTATION_HIGHLIGHT_NAME, new Highlight(range));
-  scrollRangeIntoView(range);
+  if (scroll) scrollRangeIntoView(range);
 }
 
 function seekAnnotation(annotation) {
+  setPlaying(false);
   state.activeSession = annotation.sessionIndex;
   if (annotation.globalEnd >= 0) seekGlobal(annotation.globalEnd);
   else renderSession();
@@ -413,16 +426,23 @@ function renderPlayhead() {
 function seekGlobal(globalIndex, positionMs = null) {
   const nextPlayhead = Math.max(-1, Math.min(globalIndex, playback.entries.length - 1));
   const documentStateMissing = sessions.some(session => session.documentText === undefined);
-  if (nextPlayhead !== state.playhead || documentStateMissing) rebuildDocuments(nextPlayhead);
+  const changed = nextPlayhead !== state.playhead || documentStateMissing;
+  const previousSession = state.activeSession;
+  if (changed) rebuildDocuments(nextPlayhead);
   state.playhead = nextPlayhead;
   const current = playback.entries[state.playhead];
   state.positionMs = positionMs == null
     ? (current?.timestampMs ?? startMs)
     : Math.max(startMs, Math.min(endMs, positionMs));
   if (current) state.activeSession = current.sessionIndex;
-  renderSession();
+  if (changed || previousSession !== state.activeSession) {
+    renderSession();
+    window.CSS?.highlights?.delete(ANNOTATION_HIGHLIGHT_NAME);
+    const annotation = annotations.find(item => item.globalEnd === nextPlayhead
+      && item.sessionIndex === state.activeSession && item.fragment);
+    if (annotation) highlight(annotation, false);
+  }
   renderPlayhead();
-  window.CSS?.highlights?.delete(ANNOTATION_HIGHLIGHT_NAME);
 }
 
 function seekTime(recordedMs) {
@@ -469,7 +489,9 @@ function setPlaying(playing) {
 }
 
 function renderStats() {
+  const issueCount = annotations.filter(annotation => annotation.kind === "recording_issue").length;
   $("stats").innerHTML = `
+    ${issueCount ? `<div class="recording-notice">${issueCount} recording issues detected. Counts exclude skipped edits; see Key moments for details.</div>` : ""}
     <div class="stats-section">
       <div class="stats-section-title">Overall</div>
       <div class="stat-grid">
