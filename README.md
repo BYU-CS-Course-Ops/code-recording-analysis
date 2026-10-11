@@ -114,6 +114,14 @@ The CSV includes: `assignment`, `submission`, `problem`, `student_id`,
 `num_unapproved_pastes`, `num_approved_pastes`, `num_internal_pastes`,
 `num_edits`, `num_chars`, `num_typed_chars`, `num_pasted_chars`, `num_deleted_chars`, `starts_with_starter_code`, `review_severity`, and `time_typing`.
 
+Recording-quality columns are appended to each CSV row:
+
+- `num_recording_issues`: number of recording-issue notices, including skipped stale replacements, interruptions, and snapshot recoveries.
+- `num_skipped_edits`: total edit events excluded, including stale replacements and edits in unreliable sections.
+- `analysis_incomplete`: `True` when an interruption or snapshot recovery indicates missing edit history; `False` for clean recordings or skipped stale replacements alone. A later snapshot restores playback but does not fill the gap in historical counts, so this remains `True` after recovery.
+
+Edit and paste metrics exclude skipped events. Filter or review rows with `analysis_incomplete=True` before comparing counts across students.
+
 **Example**
 
 ```bash
