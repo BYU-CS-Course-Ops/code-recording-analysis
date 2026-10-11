@@ -268,7 +268,7 @@ function renderKeyMoments() {
   Object.values(groups).forEach(group => group.sort(chronological));
 
   host.innerHTML = Object.entries(groups).map(([severity, items]) => items.length ? `
-    <details class="flag-group ${severity.toLowerCase()}" open>
+    <details class="flag-group ${severity.toLowerCase()}">
       <summary>${severity}<span class="fg-count">${items.length}</span></summary>
       <div class="flag-group-body">${items.map(annotation => {
         const index = annotations.indexOf(annotation);

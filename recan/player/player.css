@@ -320,6 +320,7 @@ input { accent-color: var(--accent); }
 
 .stats {
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 12px;
   border-right: 1px solid var(--border);
   background: var(--panel);
