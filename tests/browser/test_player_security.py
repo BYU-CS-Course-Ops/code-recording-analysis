@@ -133,6 +133,7 @@ def test_duplicate_fragment_finding_highlights_its_transformed_range(player_page
 
     # The inserted text duplicates an earlier occurrence. Clicking the finding
     # must use the event offset and account for the trailing generated-group fixup.
+    player_page.locator(".flag-group.high > summary").click()
     player_page.locator(".flag-group.high .flag").click()
     assert player_page.locator("#editor-code").text_content() == "same! prefix >same!"
     highlight = player_page.evaluate("""() => {
@@ -162,6 +163,7 @@ def test_cluster_fixups_highlight_the_final_fragment(player_page):
     ])
     player_page.set_content(build_player_html([recording]))
 
+    player_page.locator(".flag-group.high > summary").click()
     player_page.locator(".flag-group.high .flag").click()
     highlight = player_page.evaluate("""() => {
       const ranges = [...CSS.highlights.get("annotation")];
@@ -173,6 +175,7 @@ def test_cluster_fixups_highlight_the_final_fragment(player_page):
 def test_syntax_highlighting_preserves_annotation_ranges_across_tokens(player_page):
     player_page.set_content(build_player_html([session("main.py", 0)]))
 
+    player_page.locator(".flag-group.high > summary").click()
     player_page.locator(".flag-group.high .flag").click()
     assert player_page.locator("#editor-code").get_attribute("class") == "hljs language-python"
     assert player_page.locator("#editor-code .hljs-built_in").text_content() == "print"
@@ -192,6 +195,66 @@ def test_play_button_renders_pause_state(player_page):
     assert "M4 2.5h3" in player_page.locator("#play-icon").inner_html()
 
 
+@pytest.mark.parametrize("newline", ["\r\n", "\r", "\n"])
+def test_large_paste_preserves_recorded_offsets_and_exact_text(player_page, newline):
+    initial = newline.join(f"value_{i} = {i}" for i in range(40)) + newline
+    fragment = newline.join(["def pasted_function():", '    """documentation"""', "    return 42", ""])
+    recording = analyze_events([
+        {"type": "edit", "document": "main.py", "timestamp": "2026-01-01T00:00:00Z",
+         "offset": 0, "oldFragment": initial, "newFragment": initial},
+        {"type": "edit", "document": "main.py", "timestamp": "2026-01-01T00:00:01Z",
+         "offset": len(initial), "oldFragment": "", "newFragment": fragment},
+    ])
+    player_page.set_content(build_player_html([recording]))
+    player_page.locator(".flag-group.high > summary").click()
+    player_page.locator(".flag-group.high .flag").click()
+    assert player_page.locator("#editor-code").text_content() == initial + fragment
+    assert player_page.evaluate('[...CSS.highlights.get("annotation")][0].toString()') == fragment
+
+
+def test_scrubbing_and_playback_highlight_paste_and_click_pauses(player_page):
+    player_page.clock.install()
+    player_page.set_content(build_player_html([session("main.py", 0)]))
+    player_page.keyboard.press("ArrowRight")
+    assert player_page.evaluate('[...CSS.highlights.get("annotation")][0].toString()') == "print(42)\n"
+    player_page.keyboard.press("Home")
+    player_page.locator("#play-btn").click()
+    player_page.clock.run_for(100)
+    assert player_page.evaluate('[...CSS.highlights.get("annotation")][0].toString()') == "print(42)\n"
+    player_page.locator(".flag-group.high > summary").click()
+    player_page.locator(".flag-group.high .flag").click()
+    player_page.clock.run_for(1500)
+    assert player_page.locator("#play-btn").get_attribute("aria-label") == "Play"
+    assert player_page.evaluate('[...CSS.highlights.get("annotation")][0].toString()') == "print(42)\n"
+
+
+def test_recording_issue_shows_last_reliable_text_and_snapshot_restores_playback(player_page):
+    events = []
+    for second, (old, new, offset) in enumerate([
+        ("known", "known", 0), ("missing", "unreliable paste!", 0),
+        ("", "more unreliable!", 0), ("restored", "restored", 0),
+        ("", "!", 8),
+    ]):
+        events.append({"type": "edit", "document": "main.py",
+                       "timestamp": f"2026-01-01T00:00:{second:02d}Z",
+                       "oldFragment": old, "newFragment": new, "offset": offset})
+    player_page.set_content(build_player_html([analyze_events(events)]))
+    player_page.locator(".flag-group.medium > summary").click()
+    player_page.locator(".flag.recording-issue").first.click()
+    assert player_page.locator("#editor-code").text_content() == "known"
+    assert player_page.locator("#recording-warning").is_visible()
+    assert "2 edits skipped" in player_page.locator(".flag.recording-issue").first.text_content()
+    player_page.locator(".flag.recording-issue").last.click()
+    assert player_page.locator("#editor-code").text_content() == "restored"
+    assert not player_page.locator("#recording-warning").is_visible()
+    player_page.keyboard.press("End")
+    assert player_page.locator("#editor-code").text_content() == "restored!"
+    assert not player_page.locator("#recording-warning").is_visible()
+    player_page.keyboard.press("Home")
+    assert player_page.locator("#editor-code").text_content() == "known"
+    assert not player_page.locator("#recording-warning").is_visible()
+
+
 def test_key_moment_scrolls_its_code_into_view(player_page):
     initial = "".join(f"line_{index} = {index}\n" for index in range(200))
     recording = analyze_events([
@@ -209,6 +272,7 @@ def test_key_moment_scrolls_its_code_into_view(player_page):
     player_page.set_content(build_player_html([recording]))
 
     assert player_page.locator("#editor").evaluate("editor => editor.scrollTop") == 0
+    player_page.locator(".flag-group.high > summary").click()
     player_page.locator(".flag-group.high .flag").click()
 
     position = player_page.evaluate("""() => {

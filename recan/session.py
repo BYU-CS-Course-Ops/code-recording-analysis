@@ -4,6 +4,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
 from recan.algorithm import DocumentMatcher, build_matcher
+from recan.replay import validated_events
 from recan.structure import (
     Annotation,
     Session,
@@ -28,6 +29,8 @@ SNAPSHOT_INTERVAL_EVENTS = 200
 # 250 ms sits comfortably between the two.
 BURST_CLUSTER_WINDOW_MS = 250
 BURST_CLUSTER_WINDOW = timedelta(milliseconds=BURST_CLUSTER_WINDOW_MS)
+
+AUTO_CLOSE_FRAGMENTS = frozenset({"()", "[]", "{}", "''", '""', "'''", '"""'})
 
 @dataclass
 class _Cluster:
@@ -129,6 +132,9 @@ def _is_generated_edit(event: dict) -> bool:
 
     fragment = event.get("newFragment", "")
 
+    if fragment in AUTO_CLOSE_FRAGMENTS and not event.get("oldFragment", ""):
+        return True
+
     # If a student is truly typing fragments should only be 1 char
     if len(fragment) == 1:
         return False
@@ -180,6 +186,9 @@ def _is_ide_action(event: dict) -> bool:
     # TODO: Need a refactor/rename heuristic
 
     fragment = event.get("newFragment", "")
+
+    if fragment in AUTO_CLOSE_FRAGMENTS and not event.get("oldFragment", ""):
+        return True
 
     if CREATE_FUNCTION_PATTERN.fullmatch(fragment):
         return True
@@ -457,7 +466,12 @@ def _classify_cluster(
         - "internal paste":   Final fragment lived in some earlier snapshot.
         - "unapproved paste": Everything else.
     """
-    if any(_is_ide_action(e["event"]) for e in cluster.entries):
+    # A tiny auto-close followed by a real paste must not bless the whole cluster.
+    generated = [e for e in cluster.entries if e["is_generated"]]
+    if all(_is_ide_action(e["event"]) for e in generated) or any(
+        _is_ide_action(e["event"]) and e["fragment"] not in AUTO_CLOSE_FRAGMENTS
+        for e in generated
+    ):
         return "ide_action"
 
     if _is_approved_paste(fragment, approved_pastes):
@@ -496,7 +510,8 @@ def _flush_cluster(
         cluster, fragment, canonical["ts"], matchers, approved_pastes)
     line_count = fragment.count("\n") + 1
     char_count = len(fragment)
-    state.total_pasted_chars += char_count
+    if kind != "ide_action":
+        state.total_pasted_chars += char_count
 
     state.annotations.append({
         "kind": kind,
@@ -609,9 +624,34 @@ def analyze_events(
         else tuple(approved_pastes or ())
     )
 
-    for event_idx, event in enumerate(events):
+    for event_idx, event in enumerate(validated_events(events)):
         kind = _event_kind(event)
         is_initial_snapshot = _is_initial_snapshot(event, event_idx)
+
+        if kind in {"recordingIssue", "documentSnapshot", "unreliableEdit"}:
+            _flush_cluster(state, matchers, approved_sources)
+            ts = parse_ts(event["timestamp"])
+            _record_idle_gap(state, ts)
+            anchor = len(state.entries)
+            if kind == "documentSnapshot":
+                _initialize_from_snapshot({**event, "newFragment": event["document_text"]}, state)
+                state.entries.append({
+                    "type": kind, "timestamp": to_utc_iso8601(ts),
+                    "document_text": state.document,
+                })
+                state.snapshots.append({"after_idx": anchor, "document_text": state.document})
+                if state.annotations and state.annotations[-1].get("action") == "resynchronized":
+                    state.annotations[-1]["entry_end"] = anchor
+            elif kind == "recordingIssue":
+                state.entries.append({"type": kind, "timestamp": to_utc_iso8601(ts)})
+                state.annotations.append({
+                    "kind": "recording_issue", "review_severity": "MEDIUM",
+                    "timestamp": ts, "entry_start": anchor, "entry_end": anchor,
+                    **{key: event[key] for key in ("event_index", "action", "message", "skipped_edits")},
+                })
+            else:
+                state.entries.append({"type": kind, "timestamp": to_utc_iso8601(ts)})
+            continue
 
         # Recorder refreshes can emit a whole-document replacement whose old
         # and new text are identical. It is not an edit and must not affect

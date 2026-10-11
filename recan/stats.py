@@ -32,6 +32,9 @@ CSV_COLUMNS = [
     'starts_with_starter_code',
     'review_severity',
     'time_typing',
+    'num_recording_issues',
+    'num_skipped_edits',
+    'analysis_incomplete',
 ]
 
 NUMERIC_COLUMNS = [
@@ -49,6 +52,8 @@ NUMERIC_COLUMNS = [
     'num_typed_chars',
     'num_pasted_chars',
     'num_deleted_chars',
+    'num_recording_issues',
+    'num_skipped_edits',
 ]
 
 
@@ -62,6 +67,10 @@ def _row_from_session(submission, session_info: Session, student_id, student_ema
     total_time = session_info['total_time']
     time_unfocused = session_info['total_time_unfocused']
     counts = annotation_counts(session_info)
+    recording_issues = [
+        annotation for annotation in session_info['annotations']
+        if annotation['kind'] == 'recording_issue'
+    ]
     return {
         'assignment': submission.parent.name,
         'submission': submission.name,
@@ -86,6 +95,14 @@ def _row_from_session(submission, session_info: Session, student_id, student_ema
         'num_typed_chars': session_info['total_typed_chars'],
         'num_pasted_chars': session_info['total_pasted_chars'],
         'num_deleted_chars': session_info['total_deleted_chars'],
+        'num_recording_issues': len(recording_issues),
+        'num_skipped_edits': sum(issue.get('skipped_edits', 0) for issue in recording_issues),
+        # A later snapshot restores the document, not the missing edit history.
+        # Confirmed stale replacements alone do not make analysis incomplete.
+        'analysis_incomplete': any(
+            issue.get('action') in {'interrupted', 'resynchronized'}
+            for issue in recording_issues
+        ),
     }
 
 
