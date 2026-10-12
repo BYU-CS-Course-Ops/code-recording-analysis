@@ -45,6 +45,7 @@ AnnotationKind = Literal[
     "unfocused",
     "idle_gap",
     "starter_code_mismatch",
+    "recording_issue",
 ]
 ReviewSeverity = Literal["LOW", "MEDIUM", "HIGH"]
 
@@ -58,6 +59,10 @@ class AnnotationFields(TypedDict):
 
 
 class Annotation(AnnotationFields, total=False):
+    event_index: int
+    action: str
+    message: str
+    skipped_edits: int
     source_entry: int
     end_timestamp: datetime
     duration: float
@@ -86,7 +91,18 @@ class FocusStatusEntry(TypedDict):
     focused: bool
 
 
-Entry = InitialSnapshotEntry | EditEntry | FocusStatusEntry
+class DocumentSnapshotEntry(TypedDict):
+    timestamp: str
+    type: Literal["documentSnapshot"]
+    document_text: str
+
+
+class RecordingIssueEntry(TypedDict):
+    timestamp: str
+    type: Literal["recordingIssue", "unreliableEdit"]
+
+
+Entry = InitialSnapshotEntry | EditEntry | FocusStatusEntry | DocumentSnapshotEntry | RecordingIssueEntry
 
 
 class Snapshot(TypedDict):

@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f8f7f2;
   --panel: #fff;
   --panel-2: #f2efe7;
@@ -9,6 +10,8 @@
   --fg-subtle: #8e8b7f;
   --accent: #2563eb;
   --accent-soft: #dbe7ff;
+  --on-accent: #fff;
+  --annotation-fg: #1b1b17;
   --idle: #94a3b8;
   --unfocused: #d97706;
   --unapproved: #dc2626;
@@ -27,16 +30,19 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0e1422;
   --panel: #161e2f;
   --panel-2: #1f2a40;
   --border: #2b3650;
-  --border-strong: #3f4b68;
+  --border-strong: #71819d;
   --fg: #eceff6;
   --fg-muted: #a6b0c3;
-  --fg-subtle: #6e7790;
+  --fg-subtle: #a6b0c3;
   --accent: #60a5fa;
   --accent-soft: #1e3a66;
+  --on-accent: #0e1422;
+  --annotation-fg: #f4f7ff;
   --idle: #94a3b8;
   --unfocused: #fbbf24;
   --unapproved: #f87171;
@@ -45,7 +51,7 @@
   --ide-action: #a78bfa;
   --starter-mismatch: #fb7185;
   --hl-fg: #eceff6;
-  --hl-comment: #6e7790;
+  --hl-comment: #a6b0c3;
   --hl-keyword: #c792ea;
   --hl-string: #7ee787;
   --hl-number: #ffb454;
@@ -57,7 +63,12 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--fg); font: 14px Inter, system-ui, sans-serif; }
-button { color: inherit; font: inherit; }
+button, select { color: inherit; font: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input { accent-color: var(--accent); }
 
 .app {
   display: grid;
@@ -89,7 +100,7 @@ button { color: inherit; font: inherit; }
   margin-right: 8px;
   border-radius: 7px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .brand-sub {
   color: var(--fg-subtle);
@@ -124,7 +135,7 @@ button { color: inherit; font: inherit; }
 .icon-btn {
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
@@ -185,7 +196,7 @@ button { color: inherit; font: inherit; }
 .idle .swatch, .legend-swatch.idle { background: var(--idle); }
 .legend-swatch.starter-code-mismatch { background: var(--starter-mismatch); }
 
-.editor-area { display: flex; min-height: 0; flex: 1; }
+.editor-area { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .editor {
   display: grid;
   overflow: auto;
@@ -297,17 +308,19 @@ button { color: inherit; font: inherit; }
   border: 0;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 .play-btn svg { width: 16px; height: 16px; fill: currentColor; }
-.speed { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.speed { padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel); }
+.speed option { color: var(--fg); background: var(--panel); }
 .skip-idle { display: inline-flex; gap: 6px; }
 .time { font: 12px monospace; }
 .kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; font: 10px monospace; }
 
 .stats {
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 12px;
   border-right: 1px solid var(--border);
   background: var(--panel);
@@ -370,9 +383,14 @@ button { color: inherit; font: inherit; }
 
 ::highlight(annotation) {
   background: var(--accent-soft);
+  color: var(--annotation-fg);
   text-decoration: underline 2px var(--accent);
   text-underline-offset: 3px;
 }
+
+.recording-notice { padding: 10px; border-left: 3px solid var(--unfocused); background: var(--panel-2); color: var(--fg); font-size: 12px; }
+.tick-annotation.recording-issue { background: var(--unfocused); }
+.flag.recording-issue { border-left-color: var(--unfocused); }
 
 @media (max-width: 980px) {
   .app {
