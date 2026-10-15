@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.24
+
+- Handle IDE auto-indented pastes; this addresses false-positive unapproved pastes where the paste site has different indentation from the copy site.
+
 ## 0.2.22
 
 - Classify and count generated edits after applying recorded IDE fixups.

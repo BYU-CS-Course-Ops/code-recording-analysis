@@ -1,8 +1,8 @@
 """
 DocumentMatcher — searchable index over a document's full edit history.
 
-After every edit, the full post-edit document is appended to a growing
-bytearray, separated by a NUL SENTINEL. After finalize(), a suffix array is
+After every edit, an indentation-normalized copy of the full post-edit document
+is appended to a growing bytearray, separated by a NUL SENTINEL. After finalize(), a suffix array is
 built over that corpus and `contains(fragment, ts)` answers
 "did this fragment appear anywhere in the document strictly before `ts`?".
 
@@ -19,12 +19,21 @@ Corpus grows as O(E·D), so this assumes one student / one file / one sitting.
 """
 
 import bisect
+import re
 from datetime import datetime
 
 from pydivsufsort import divsufsort, sa_search
 
 from recan.utils import parse_ts, splice
 from recan.replay import validated_events
+
+
+_LEADING_INDENTATION = re.compile(r"^[ \t]+", re.MULTILINE)
+
+
+def _without_indentation(text: str) -> str:
+    """Remove indentation from every line while preserving all other text."""
+    return _LEADING_INDENTATION.sub("", text)
 
 
 class DocumentMatcher:
@@ -90,10 +99,14 @@ class DocumentMatcher:
         self._document = splice(self._document, offset, old_fragment, new_fragment)
 
         # Append the new full document state to the corpus, terminated by SENTINEL.
+        # Leading indentation is omitted from every line because IDEs commonly
+        # reindent pasted text. We only need to know whether the text could have
+        # come from the document, not whether it appeared at the same indentation.
         # We snapshot the WHOLE document (not just the diff) so the suffix array
         # can answer "did this substring ever exist anywhere in the document?"
         # without having to reconstruct intermediate states.
-        self._history_bytes.extend(self._document.encode("utf-8"))
+        normalized_document = _without_indentation(self._document)
+        self._history_bytes.extend(normalized_document.encode("utf-8"))
         self._history_bytes.append(self.SENTINEL)
 
         self._snapshot_ends.append(len(self._history_bytes))
@@ -128,7 +141,9 @@ class DocumentMatcher:
         if cutoff == 0:
             return False
 
-        needle = fragment.encode("utf-8")
+        needle = _without_indentation(fragment).encode("utf-8")
+        if not needle:
+            return False
         positions = self._find_match_positions(needle)
         if len(positions) == 0:
             return False

@@ -62,6 +62,53 @@ def test_internal_paste_after_explicit_deletion():
     assert sum(a["kind"] == "unapproved_paste" for a in session["annotations"]) == 0
 
 
+def test_single_line_internal_paste_ignores_added_indentation():
+    history = [
+        _paste_edit(
+            "def move_to_end_position(bit):\n",
+            0,
+            "2026-05-14T11:59:59Z",
+        )
+    ]
+    events = [
+        _paste_edit(
+            "    move_to_end_position(bit)",
+            0,
+            "2026-05-14T12:00:00Z",
+        )
+    ]
+
+    session = analyze_events(events, [build_matcher(history)])
+
+    annotation, = session["annotations"]
+    assert annotation["kind"] == "internal_paste"
+
+
+def test_multiline_internal_paste_ignores_changed_indentation():
+    history = [
+        _paste_edit(
+            "def cross_row(bit):\n"
+            "    while bit.can_move_front():\n"
+            "        bit.move()\n",
+            0,
+            "2026-05-14T11:59:59Z",
+        )
+    ]
+    events = [
+        _paste_edit(
+            "        while bit.can_move_front():\n"
+            "            bit.move()",
+            0,
+            "2026-05-14T12:00:00Z",
+        )
+    ]
+
+    session = analyze_events(events, [build_matcher(history)])
+
+    annotation, = session["annotations"]
+    assert annotation["kind"] == "internal_paste"
+
+
 def test_internal_paste_matches_transient_state_not_in_final_doc():
     """Type a line, mutate it in-place so the original string is no longer
     a substring of the document, then generate-paste the original.
