@@ -200,8 +200,10 @@ def _is_ide_action(event: dict) -> bool:
 
 
 def _is_approved_paste(fragment: str, approved_pastes: Sequence[str]) -> bool:
-    """Whether a generated fragment appears in an approved-fragments source."""
-    if not fragment or not approved_pastes:
+    """Whether a generated fragment is approved or consists only of whitespace."""
+    if not fragment.strip():
+        return True
+    if not approved_pastes:
         return False
 
     fragment = normalize_newlines(fragment)

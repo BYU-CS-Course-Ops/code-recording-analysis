@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.25
+
+- Classify empty and whitespace-only pastes as approved.
+
 ## 0.2.24
 
 - Handle IDE auto-indented pastes; this addresses false-positive unapproved pastes where the paste site has different indentation from the copy site.

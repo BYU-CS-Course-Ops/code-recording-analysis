@@ -3,7 +3,9 @@ assert that the resulting annotation kinds reflect internal-paste logic."""
 
 from datetime import datetime, timedelta
 
-from recan.session import analyze_events
+import pytest
+
+from recan.session import _Cluster, _classify_cluster, analyze_events
 from recan.algorithm import build_matcher
 
 
@@ -182,6 +184,38 @@ def test_approved_paste_beats_internal():
     assert paste_annotations[0]["kind"] == "approved_paste"
     assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 0
     assert sum(a["kind"] == "approved_paste" for a in session["annotations"]) == 1
+
+
+@pytest.mark.parametrize("fragment", ["", "   ", "\t\t", "\n\n", " \t\n\r"])
+def test_empty_or_whitespace_only_paste_is_approved(fragment):
+    event = {"newFragment": fragment}
+    cluster = _Cluster(entries=[{
+        "is_generated": True,
+        "event": event,
+        "fragment": fragment,
+    }])
+
+    kind = _classify_cluster(
+        cluster, fragment, datetime(2026, 5, 14, 12, 0, 0), [], []
+    )
+
+    assert kind == "approved_paste"
+
+
+def test_non_whitespace_fragment_without_approval_remains_unapproved():
+    fragment = "external code"
+    event = {"newFragment": fragment}
+    cluster = _Cluster(entries=[{
+        "is_generated": True,
+        "event": event,
+        "fragment": fragment,
+    }])
+
+    kind = _classify_cluster(
+        cluster, fragment, datetime(2026, 5, 14, 12, 0, 0), [], []
+    )
+
+    assert kind == "unapproved_paste"
 
 
 def test_external_fragment_still_unapproved():
