@@ -12,6 +12,7 @@ def validated_events(events: list[dict]) -> list[dict]:
     result = []
     document = ""
     interrupted = None
+    seen_edit = False
 
     def issue(event, index, action, message):
         marker = {
@@ -29,6 +30,9 @@ def validated_events(events: list[dict]) -> list[dict]:
         if kind != "edit":
             result.append(event)
             continue
+        # Metadata may precede the first document event. Keep raw indices for diagnostics.
+        is_first_edit = not seen_edit
+        seen_edit = True
         offset = event.get("offset", 0)
         old = event.get("oldFragment", "")
         new = event.get("newFragment", "")
@@ -36,7 +40,7 @@ def validated_events(events: list[dict]) -> list[dict]:
         # The recorder represents full-document snapshots as identical old/new
         # text at offset zero. They are observations, never student paste events.
         if offset == 0 and old == new:
-            if index == 0:
+            if is_first_edit:
                 document = new
                 result.append(event)
             elif interrupted is not None or document != new:
