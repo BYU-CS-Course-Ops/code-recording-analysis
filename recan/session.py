@@ -96,10 +96,10 @@ def _event_kind(event: dict) -> str:
     return "unknown"
 
 
-def _is_initial_snapshot(event: dict, event_idx: int) -> bool:
+def _is_initial_snapshot(event: dict, *, document_seen: bool) -> bool:
     """Whether an event is the recorder's non-edit initial document snapshot."""
     return (
-        event_idx == 0
+        not document_seen
         and _event_kind(event) == "edit"
         and event.get("offset", 0) == 0
         and event.get("oldFragment") == event.get("newFragment")
@@ -626,9 +626,14 @@ def analyze_events(
         else tuple(approved_pastes or ())
     )
 
-    for event_idx, event in enumerate(validated_events(events)):
+    document_seen = False
+    for event in validated_events(events):
         kind = _event_kind(event)
-        is_initial_snapshot = _is_initial_snapshot(event, event_idx)
+        is_initial_snapshot = _is_initial_snapshot(event, document_seen=document_seen)
+        # Focus and metadata records do not establish document state; genuine edit
+        # failures and recoveries do, so a later snapshot must remain a recovery.
+        if kind in {"edit", "recordingIssue", "documentSnapshot", "unreliableEdit"}:
+            document_seen = True
 
         if kind in {"recordingIssue", "documentSnapshot", "unreliableEdit"}:
             _flush_cluster(state, matchers, approved_sources)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.26
+
+- Recognize initial document snapshots after setting-change or other metadata events, avoiding false recovery, incomplete-analysis, and starter-code mismatch warnings.
+
 ## 0.2.25
 
 - Classify empty and whitespace-only pastes as approved.
