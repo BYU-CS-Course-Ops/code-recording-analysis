@@ -236,3 +236,34 @@ def test_external_fragment_still_unapproved():
     assert paste_annotations[0]["kind"] == "unapproved_paste"
     assert sum(a["kind"] == "unapproved_paste" for a in session["annotations"]) == 1
     assert sum(a["kind"] == "internal_paste" for a in session["annotations"]) == 0
+
+
+def test_paste_edited_by_an_ide_fixup_in_the_same_burst_is_still_internal():
+    """A paste of earlier text stays internal when the IDE tweaks it within the burst
+    (e.g. reformatting adds a space after a comma), even though the tweaked text never existed."""
+    block = "if 'oo' in text:\n    text = text.replace('oo','ooooo')\n"
+    typed = [
+        {"type": "edit", "document": "doubles.py", "timestamp": f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
+         "offset": i, "oldFragment": "", "newFragment": ch}
+        for i, ch in enumerate(block)
+    ]
+    comma = len(block) + block.index("','") + 1
+    paste = {"type": "edit", "document": "doubles.py", "timestamp": "2026-01-01T01:00:00.000Z",
+             "offset": len(block), "oldFragment": "", "newFragment": block}
+    reformat = {"type": "edit", "document": "doubles.py", "timestamp": "2026-01-01T01:00:00.050Z",
+                "offset": comma + 1, "oldFragment": "", "newFragment": " "}
+    events = [*typed, paste, reformat]
+    session = analyze_events(events, [build_matcher(events)])
+    annotation, = [a for a in session["annotations"] if a["kind"] != "idle_gap"]
+    assert annotation["fragment"].count("', '") == 1  # the reformatted text is what's reported
+    assert annotation["kind"] == "internal_paste"
+
+
+def test_paste_edited_in_the_same_burst_is_still_unapproved_if_the_original_was_new():
+    paste = {"type": "edit", "document": "doubles.py", "timestamp": "2026-01-01T01:00:00.000Z",
+             "offset": 0, "oldFragment": "", "newFragment": "print('never seen before')\n"}
+    reformat = {"type": "edit", "document": "doubles.py", "timestamp": "2026-01-01T01:00:00.050Z",
+                "offset": 5, "oldFragment": "", "newFragment": " "}
+    events = [paste, reformat]
+    session = analyze_events(events, [build_matcher(events)])
+    assert session["annotations"][0]["kind"] == "unapproved_paste"
