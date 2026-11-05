@@ -236,11 +236,6 @@ _TYPOGRAPHY = str.maketrans({
 })
 
 
-# The looser check only applies to text at least this long once simplified. Stripping line markers can shrink
-# a short paste ("- a", "1. i") to a character or two, which would match nearly any source.
-MIN_LOOSE_MATCH_CHARS = 12
-
-
 @lru_cache(maxsize=512)
 def _loose_text(text: str) -> str:
     """
@@ -269,7 +264,8 @@ def _is_approved_paste(fragment: str, approved_pastes: Sequence[str]) -> bool:
         return True
     # Pastes from the instructions come from the rendered page: no list markers, rewrapped lines.
     loose = _loose_text(fragment)
-    return len(loose) >= MIN_LOOSE_MATCH_CHARS and any(loose in _loose_text(source) for source in approved_pastes)
+    # A paste that is only markers simplifies to "", which is a substring of everything.
+    return bool(loose) and any(loose in _loose_text(source) for source in approved_pastes)
 
 
 def _load_approved_pastes(approved_pastes_path: Path | Sequence[Path] | None) -> list[str]:

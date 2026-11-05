@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.27
 
-- Approved pastes are matched loosely as a second chance: line markers (`#`, Markdown headings, list numbers and bullets), bold and code marks and typographic quotes are ignored, and line wraps and runs of whitespace don't matter. A paste of instructions copied from the rendered page now matches the Markdown source. Code is not made whitespace-insensitive (`x=1` still differs from `x = 1`). The loose match needs at least 12 characters after simplifying, so a marker can't shrink a short paste (`- a`) into a match.
+- Approved pastes are matched loosely as a second chance: line markers (`#`, Markdown headings, list numbers and bullets), bold and code marks and typographic quotes are ignored, and line wraps and runs of whitespace don't matter. A paste of instructions copied from the rendered page now matches the Markdown source. Code is not made whitespace-insensitive (`x=1` still differs from `x = 1`).
 - `--approved-pastes` accepts more than one file (e.g. the instructions and the expected test output). Each file is its own source: a paste must fall within one file to be approved.
 - Selecting text and typing a quote or bracket (the IDE wraps the selection in one edit) is an IDE action, not a paste. Only an edit whose new text is exactly the old text plus a matching pair counts.
 - A paste of earlier (internal) or approved text stays internal/approved when another edit in the same burst changes the pasted text afterwards (for example a space is added or a character deleted inside it). Previously only the final, edited text was compared, and that text never existed anywhere in the document.

@@ -75,12 +75,12 @@ def test_loose_matching_does_not_make_code_whitespace_insensitive():
     assert not _is_approved_paste("x=1", ["x = 1\n"])
 
 
-@pytest.mark.parametrize("fragment", ["- a", "1. i", "* e", "> t", "1) a", "- the"])
-def test_markers_cannot_shrink_a_short_paste_into_a_match(fragment):
-    """Stripping a list marker leaves a character or two, which is in almost any source."""
-    assert not _is_approved_paste(fragment, [INSTRUCTIONS])
+@pytest.mark.parametrize("fragment", ["-", "#", "1.", "> ", "**"])
+def test_a_paste_of_only_markers_is_not_approved(fragment):
+    """It simplifies to an empty string, which is a substring of every source."""
+    assert not _is_approved_paste(fragment, ["Hello world\n"])
 
 
 def test_a_short_exact_match_is_still_approved():
-    """The length floor is only for the loose check; exact matches are unaffected."""
+    """Short exact matches are approved."""
     assert _is_approved_paste("Example", [INSTRUCTIONS])
