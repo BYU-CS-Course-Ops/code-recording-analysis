@@ -91,3 +91,41 @@ def test_template_in_cluster_is_detected_when_longest_fragment_is_not_a_stub():
     assert (annotation["entry_start"], annotation["entry_end"]) == (0, 1)
     assert annotation["fragment"] == replacement
     assert session["snapshots"][-1]["document_text"] == replacement
+
+
+def _paste_annotations(session):
+    return [a for a in session["annotations"] if a["kind"] != "idle_gap"]
+
+
+@pytest.mark.parametrize("opener, closer", [
+    ("'", "'"), ('"', '"'), ("(", ")"), ("[", "]"), ("{", "}"), ("`", "`"),
+    ("'''", "'''"), ('"""', '"""'),
+])
+def test_surrounding_selected_text_is_an_ide_action(opener, closer):
+    """Selecting text and typing a quote/bracket makes the IDE wrap it, in a single edit."""
+    typed = [edit(ch, offset=i, timestamp=f"2026-01-01T00:00:{i:02d}Z")
+             for i, ch in enumerate("x.append(character)")]
+    start = "x.append(".__len__()
+    wrap = edit(opener + "character" + closer, old="character", offset=start,
+                timestamp="2026-01-01T00:01:00Z")
+    session = analyze_events([*typed, wrap])
+    annotation, = _paste_annotations(session)
+    assert annotation["kind"] == "ide_action"
+    assert session["total_pasted_chars"] == 0
+
+
+@pytest.mark.parametrize("old, new", [
+    ("character", "'character"),              # unbalanced
+    ("character", "'character\""),             # mismatched
+    ("character", "(character]"),
+    ("character", "'other'"),                  # replaces the text with something new
+    ("character", "'character' + other"),      # wrapped, but with extra text added
+    ("character", "'character'\nprint(x)"),
+    ("", "'character'"),                       # nothing was selected: a plain insertion
+])
+def test_surround_lookalikes_are_still_pastes(old, new):
+    typed = [edit(ch, offset=i, timestamp=f"2026-01-01T00:00:{i:02d}Z")
+             for i, ch in enumerate("x.append(character)")]
+    wrap = edit(new, old=old, offset=9, timestamp="2026-01-01T00:01:00Z")
+    session = analyze_events([*typed, wrap])
+    assert [a["kind"] for a in _paste_annotations(session)] == ["unapproved_paste"]

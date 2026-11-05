@@ -1,5 +1,7 @@
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from functools import lru_cache
 from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
@@ -31,6 +33,13 @@ BURST_CLUSTER_WINDOW_MS = 250
 BURST_CLUSTER_WINDOW = timedelta(milliseconds=BURST_CLUSTER_WINDOW_MS)
 
 AUTO_CLOSE_FRAGMENTS = frozenset({"()", "[]", "{}", "''", '""', "'''", '"""'})
+
+# Selecting text and typing one of these makes the IDE wrap the selection, as a
+# single edit: oldFragment "x" -> newFragment "'x'". (opener, closer) pairs.
+SURROUND_PAIRS = (
+    ("'", "'"), ('"', '"'), ("`", "`"), ("'''", "'''"), ('"""', '"""'),
+    ("(", ")"), ("[", "]"), ("{", "}"),
+)
 
 @dataclass
 class _Cluster:
@@ -174,11 +183,27 @@ def _is_internal_paste(
     return any(m.contains(fragment, ts) for m in matchers)
 
 
+def _is_surround_edit(event: dict) -> bool:
+    """
+    Whether an edit only wraps text that was already there in a quote or bracket pair.
+
+    Selecting text and typing a quote or bracket makes the IDE surround the
+    selection in one edit. Nothing new is introduced: the new fragment is exactly
+    the old fragment plus matching delimiters.
+    """
+    old = event.get("oldFragment", "")
+    new = event.get("newFragment", "")
+    if not old.strip():
+        return False
+    return any(new == opener + old + closer for opener, closer in SURROUND_PAIRS)
+
+
 def _is_ide_action(event: dict) -> bool:
     """
     Heuristic for "this edit looks like an IDE auto-completion or refactor."
 
     Checks:
+        - Does the event wrap selected text in quotes or brackets?
         - Does the event contain a fragment that looks like PyCharm's "create function" action?
         - Does the event contain a fragment that looks like PyCharm's main block generation when tab completing "if __name__ == "__main__""?
     """
@@ -190,6 +215,9 @@ def _is_ide_action(event: dict) -> bool:
     if fragment in AUTO_CLOSE_FRAGMENTS and not event.get("oldFragment", ""):
         return True
 
+    if _is_surround_edit(event):
+        return True
+
     if CREATE_FUNCTION_PATTERN.fullmatch(fragment):
         return True
 
@@ -197,6 +225,30 @@ def _is_ide_action(event: dict) -> bool:
         return True
 
     return False
+
+
+# Leading markers on a line that the rendered page (or a comment) doesn't show: Markdown headings, quotes and
+# list numbers/bullets, and "#" comment prefixes. Repeated, so "# 1. Item" loses both.
+_LINE_MARKERS = re.compile(r"^\s*(?:(?:[#>]+|\d+[.)]|[-*+])\s+|#+)*")
+_TYPOGRAPHY = str.maketrans({
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u00a0": " ", "\u2013": "-", "\u2014": "-", "\u2026": "...",
+})
+
+
+@lru_cache(maxsize=512)
+def _loose_text(text: str) -> str:
+    """
+    Reduce text to what survives being copied from the rendered page instead of the source file.
+
+    Drops comment/Markdown line markers, bold and code marks, and typographic quotes, and joins lines
+    and collapses runs of whitespace into single spaces (hard wrapping and indentation don't matter).
+    Words and punctuation are otherwise unchanged, so code isn't made whitespace-insensitive:
+    "x=1" still differs from "x = 1".
+    """
+    lines = (_LINE_MARKERS.sub("", line) for line in text.translate(_TYPOGRAPHY).splitlines())
+    joined = " ".join(lines).replace("**", "").replace("`", "")
+    return " ".join(joined.split())
 
 
 def _is_approved_paste(fragment: str, approved_pastes: Sequence[str]) -> bool:
@@ -208,16 +260,24 @@ def _is_approved_paste(fragment: str, approved_pastes: Sequence[str]) -> bool:
 
     fragment = normalize_newlines(fragment)
     # Check each source independently: an approved match may not span files.
-    return any(fragment in source for source in approved_pastes)
+    if any(fragment in source for source in approved_pastes):
+        return True
+    # Pastes from the instructions come from the rendered page: no list markers, rewrapped lines.
+    loose = _loose_text(fragment)
+    # A paste that is only markers simplifies to "", which is a substring of everything.
+    return bool(loose) and any(loose in _loose_text(source) for source in approved_pastes)
 
 
-def _load_approved_pastes(approved_pastes_path: Path | None) -> list[str]:
+def _load_approved_pastes(approved_pastes_path: Path | Sequence[Path] | None) -> list[str]:
+    """Read each approved-pastes file as its own source; missing files are skipped."""
     if not approved_pastes_path:
         return []
-    path = Path(approved_pastes_path)
-    if not path.is_file():
-        return []
-    return [normalize_newlines(path.read_text(encoding="utf-8"))]
+    paths = [approved_pastes_path] if isinstance(approved_pastes_path, (str, Path)) else approved_pastes_path
+    sources = []
+    for path in map(Path, paths):
+        if path.is_file():
+            sources.append(normalize_newlines(path.read_text(encoding="utf-8")))
+    return sources
 
 
 def _load_starter_code(paths: Sequence[Path] | None) -> dict[str, str]:
@@ -454,6 +514,7 @@ def _classify_cluster(
         timestamp: datetime,
         matchers: Sequence[DocumentMatcher],
         approved_pastes: Sequence[str],
+        original_fragment: str | None = None,
 ) -> str:
     """
     Pick the final annotation kind for the whole cluster.
@@ -467,7 +528,16 @@ def _classify_cluster(
         - "approved paste":   Final fragment appears in the approved-fragments file.
         - "internal paste":   Final fragment lived in some earlier snapshot.
         - "unapproved paste": Everything else.
+
+    The approved and internal checks also accept the fragment as it was first
+    inserted (`original_fragment`). Edits that land in the same burst as a paste
+    (an IDE reformatting it, or a character deleted or typed inside it) can leave
+    a final text that never existed anywhere, even though what was pasted did.
     """
+    candidates = [fragment]
+    if original_fragment is not None and original_fragment != fragment:
+        candidates.append(original_fragment)
+
     # A tiny auto-close followed by a real paste must not bless the whole cluster.
     generated = [e for e in cluster.entries if e["is_generated"]]
     if all(_is_ide_action(e["event"]) for e in generated) or any(
@@ -476,10 +546,10 @@ def _classify_cluster(
     ):
         return "ide_action"
 
-    if _is_approved_paste(fragment, approved_pastes):
+    if any(_is_approved_paste(c, approved_pastes) for c in candidates):
         return "approved_paste"
 
-    if _is_internal_paste(fragment, timestamp, matchers):
+    if any(_is_internal_paste(c, timestamp, matchers) for c in candidates):
         return "internal_paste"
 
     return "unapproved_paste"
@@ -509,7 +579,8 @@ def _flush_cluster(
     canonical = max(generated, key=lambda e: len(e["fragment"]))
     fragment = _final_cluster_fragment(cluster, canonical, state.document)
     kind = _classify_cluster(
-        cluster, fragment, canonical["ts"], matchers, approved_pastes)
+        cluster, fragment, canonical["ts"], matchers, approved_pastes,
+        original_fragment=canonical["fragment"])
     line_count = fragment.count("\n") + 1
     char_count = len(fragment)
     if kind != "ide_action":
@@ -723,7 +794,7 @@ def analyze_events(
     return _build_session(state)
 
 
-def load_sessions(recording_files: list[Path], problems: Path, approved_pastes_path: Path | None,
+def load_sessions(recording_files: list[Path], problems: Path, approved_pastes_path: Path | Sequence[Path] | None,
                   excluded_file_types: list[str], starter_code_paths: Sequence[Path] | None = None) -> list[Session]:
     """
     Load and analyze every recording matched by `recording_files`, one Session each.
