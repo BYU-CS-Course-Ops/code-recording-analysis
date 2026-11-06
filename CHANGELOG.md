@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.28
 
-- `recan/default_approved_pastes.txt` holds pastes that are always approved, with or without `--approved-pastes` (to start: `if __name__ == '__main__':` with `main()`, in both quote styles). Entries are separated by a line containing only `---`, and each entry is its own source. They get the same loose matching as any approved file, so a student pasting the block instead of using PyCharm's template isn't flagged.
+- `recan/default_approved_pastes.txt` holds pastes that are always approved, with or without `--approved-pastes` (to start: `if __name__ == '__main__':` with `main()`, in both quote styles). Entries are separated by a line containing only `---`, and each entry is its own source. They get the same loose matching as any approved file, so a student pasting the block instead of using PyCharm's main block autocomplete isn't flagged.
 
 ## 0.2.27
 
