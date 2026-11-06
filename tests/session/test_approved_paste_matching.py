@@ -84,3 +84,54 @@ def test_a_paste_of_only_markers_is_not_approved(fragment):
 def test_a_short_exact_match_is_still_approved():
     """Short exact matches are approved."""
     assert _is_approved_paste("Example", [INSTRUCTIONS])
+
+
+# --- default approved pastes (recan/default_approved_pastes.txt) ---
+
+from recan.session import _load_approved_pastes, _load_default_approved_pastes  # noqa: E402
+
+
+@pytest.fixture
+def extra_file(tmp_path):
+    path = tmp_path / "extra.txt"
+    path.write_text("Something only in this file\n", encoding="utf-8")
+    return path
+
+
+def test_the_defaults_are_added_to_the_given_files(extra_file):
+    sources = _load_approved_pastes([extra_file])
+    assert set(_load_default_approved_pastes()) <= set(sources)
+    assert "Something only in this file\n" in sources
+
+
+def test_the_defaults_apply_even_without_any_approved_pastes_path():
+    defaults = _load_default_approved_pastes()
+    assert defaults
+    assert _load_approved_pastes(None) == defaults
+    assert _load_approved_pastes([]) == defaults
+    assert _is_approved_paste("if __name__ == '__main__':", _load_approved_pastes(None))
+
+
+def test_each_default_entry_is_its_own_source():
+    defaults = _load_default_approved_pastes()
+    assert len(defaults) >= 2
+    assert not any("---" in entry for entry in defaults)
+
+
+@pytest.mark.parametrize("fragment", [
+    "if __name__ == '__main__':",
+    'if __name__ == "__main__":',
+    "if __name__ == '__main__':\n    main()",
+    "if __name__  ==  '__main__':",  # extra spaces
+    "if __name__ == '__main__':\n\tmain()",  # different indentation
+])
+def test_the_main_block_is_approved_without_the_ide_template(fragment, extra_file):
+    assert _is_approved_paste(fragment, _load_approved_pastes([extra_file]))
+
+
+@pytest.mark.parametrize("fragment", [
+    "if __name__ == '__main__':\n    evil()",
+    "if __name__ == '__other__':",
+])
+def test_near_misses_are_not_approved(fragment, extra_file):
+    assert not _is_approved_paste(fragment, _load_approved_pastes([extra_file]))

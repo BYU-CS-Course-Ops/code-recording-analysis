@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.28
+
+- `recan/default_approved_pastes.txt` holds pastes that are always approved, with or without `--approved-pastes` (to start: `if __name__ == '__main__':` with `main()`, in both quote styles). Entries are separated by a line containing only `---`, and each entry is its own source. They get the same loose matching as any approved file, so a student pasting the block instead of using PyCharm's main block autocomplete isn't flagged.
+
 ## 0.2.27
 
 - Approved pastes are matched loosely as a second chance: line markers (`#`, Markdown headings, list numbers and bullets), bold and code marks and typographic quotes are ignored, and line wraps and runs of whitespace don't matter. A paste of instructions copied from the rendered page now matches the Markdown source. Code is not made whitespace-insensitive (`x=1` still differs from `x = 1`).

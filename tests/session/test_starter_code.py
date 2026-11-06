@@ -78,15 +78,16 @@ def test_duplicate_and_unreadable_starters_fail_clearly(tmp_path):
 
 
 def test_approved_pastes_accept_several_files_as_independent_sources(tmp_path):
-    from recan.session import _load_approved_pastes
+    from recan.session import _load_approved_pastes, _load_default_approved_pastes
+    defaults = _load_default_approved_pastes()
     a = tmp_path / "a.md"
     b = tmp_path / "b.txt"
     a.write_text("alpha\r\nbeta\r\n", encoding="utf-8")
     b.write_text("gamma\n", encoding="utf-8")
-    assert _load_approved_pastes([a, b]) == ["alpha\nbeta\n", "gamma\n"]
-    assert _load_approved_pastes(a) == ["alpha\nbeta\n"]  # a single path still works
-    assert _load_approved_pastes([a, tmp_path / "missing.txt"]) == ["alpha\nbeta\n"]
-    assert _load_approved_pastes(None) == []
+    assert _load_approved_pastes([a, b]) == [*defaults, "alpha\nbeta\n", "gamma\n"]
+    assert _load_approved_pastes(a) == [*defaults, "alpha\nbeta\n"]  # a single path still works
+    assert _load_approved_pastes([a, tmp_path / "missing.txt"]) == [*defaults, "alpha\nbeta\n"]
+    assert _load_approved_pastes(None) == defaults
     # sources stay independent: text spanning the end of one and the start of the next doesn't match
     from recan.session import _is_approved_paste
     sources = _load_approved_pastes([a, b])
