@@ -268,12 +268,36 @@ def _is_approved_paste(fragment: str, approved_pastes: Sequence[str]) -> bool:
     return bool(loose) and any(loose in _loose_text(source) for source in approved_pastes)
 
 
-def _load_approved_pastes(approved_pastes_path: Path | Sequence[Path] | None) -> list[str]:
-    """Read each approved-pastes file as its own source; missing files are skipped."""
-    if not approved_pastes_path:
+DEFAULT_APPROVED_PASTES_PATH = Path(__file__).resolve().parent / "default_approved_pastes.txt"
+DEFAULT_APPROVED_PASTES_SEPARATOR = re.compile(r"^---[ \t]*$", re.MULTILINE)
+
+
+def _load_default_approved_pastes() -> list[str]:
+    """
+    Read the approved pastes that ship with recan (default_approved_pastes.txt).
+
+    The file holds one entry per block, blocks separated by a line containing only `---`. Each entry is its
+    own source, so a paste must fall within one entry to match. Matching is the same as for any approved
+    source, including the loose second check.
+    """
+    if not DEFAULT_APPROVED_PASTES_PATH.is_file():
         return []
-    paths = [approved_pastes_path] if isinstance(approved_pastes_path, (str, Path)) else approved_pastes_path
-    sources = []
+    text = normalize_newlines(DEFAULT_APPROVED_PASTES_PATH.read_text(encoding="utf-8"))
+    entries = (entry.strip("\n") for entry in DEFAULT_APPROVED_PASTES_SEPARATOR.split(text))
+    return [entry for entry in entries if entry.strip()]
+
+
+def _load_approved_pastes(approved_pastes_path: Path | Sequence[Path] | None) -> list[str]:
+    """
+    Read each approved-pastes file as its own source; missing files are skipped.
+
+    recan's default approved pastes are always included, with or without any paths.
+    """
+    if not approved_pastes_path:
+        paths = []
+    else:
+        paths = [approved_pastes_path] if isinstance(approved_pastes_path, (str, Path)) else approved_pastes_path
+    sources = _load_default_approved_pastes()
     for path in map(Path, paths):
         if path.is_file():
             sources.append(normalize_newlines(path.read_text(encoding="utf-8")))
